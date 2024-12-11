@@ -1,153 +1,194 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <wchar.h>
 #include <wctype.h>
 #include <locale.h>
 #include <math.h>
 
-#define LONGUEUR_MOT_MAX 50      
-#define NB_MOTS_MAX 20000        
-#define LONGUEUR_CHEMIN_MAX 256  
-#define TAILLE_HASHTABLE 10007   
+#define LONGUEUR_MOT_MAX 50 // Définit la longueur maximale d'un mot à analyser
+#define NB_MOTS_MAX 20000   // Définit le nombre maximal de mots pouvant être analysés
+#define LONGUEUR_CHEMIN_MAX 256  // Définit la longueur maximale pour un chemin de fichier
+#define TAILLE_HASHTABLE 10007   // Définit la taille de la table de hachage utilisée pour stocker les mots
 
+// Structure représentant un mot analysé
 typedef struct {
-    wchar_t mot[LONGUEUR_MOT_MAX];
-    int frequence;                   
-    int longueur;                    
-    int est_verbe;                   
-    int est_nom_propre;              
+    wchar_t mot[LONGUEUR_MOT_MAX]; // Tableau pour stocker le mot (en caractères larges, compatible Unicode)
+    int frequence;   // Fréquence d'apparition du mot dans le texte
+    int longueur;    // Longueur du mot (nombre de caractères)
+    int est_verbe;   // Indicateur si le mot est un verbe (1 si vrai, 0 sinon)
+    int est_nom_propre;  // Indicateur si le mot est un nom propre (1 si vrai, 0 sinon)
 } Mot;
-
+// Structure représentant un nœud dans la table de hachage
 typedef struct NoeudHash {
-    Mot mot;                     
-    struct NoeudHash* suivant;   
+    Mot mot;                     // Le mot stocké dans ce nœud
+    struct NoeudHash* suivant;   // Pointeur vers le prochain nœud en cas de collision (chaînage)
 } NoeudHash;
 
+// Structure principale pour analyser le texte
 typedef struct {
-    int nb_mots_total;          
-    int nb_mots_uniques;        
-    int nb_phrases;             
-    int nb_paragraphes;         
-    double longueur_mot_moyenne;    
-    double longueur_phrase_moyenne; 
-    double diversite_lexicale;      
-    double complexite_texte;        
-    int nb_verbes;              
-    int nb_noms_propres;        
-    NoeudHash* table_hash[TAILLE_HASHTABLE];  
+    int nb_mots_total;          // Nombre total de mots analysés dans le texte
+    int nb_mots_uniques;        // Nombre de mots uniques trouvés (sans répétition)
+    int nb_phrases;             // Nombre total de phrases dans le texte
+    int nb_paragraphes;         // Nombre total de paragraphes dans le texte
+    double longueur_mot_moyenne;    // Longueur moyenne des mots dans le texte
+    double longueur_phrase_moyenne; // Longueur moyenne des phrases dans le texte
+    double diversite_lexicale;      // Rapport entre les mots uniques et le nombre total de mots
+    double complexite_texte;        // Indicateur global de la complexité du texte (combinaison de métriques)
+    int nb_verbes;              // Nombre total de verbes identifiés dans le texte
+    int nb_noms_propres;        // Nombre total de noms propres identifiés dans le texte
+    NoeudHash* table_hash[TAILLE_HASHTABLE];  // Table de hachage pour stocker et retrouver les mots rapidement
 } AnalyseTexte;
 
+// Initialise la structure AnalyseTexte à des valeurs par défaut
 void initialiserAnalyse(AnalyseTexte* analyse) {
+    // Remplit toute la structure AnalyseTexte avec des zéros (initialisation complète)
     memset(analyse, 0, sizeof(AnalyseTexte));
+    // Initialise chaque élément de la table de hachage à NULL (aucun mot n'est encore stocké)
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
         analyse->table_hash[i] = NULL;
     }
 }
 
+// Libère la mémoire allouée dynamiquement pour la structure AnalyseTexte
 void libererAnalyse(AnalyseTexte* analyse) {
+    // Parcourt chaque entrée de la table de hachage
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
-        NoeudHash* courant = analyse->table_hash[i];
+        NoeudHash* courant = analyse->table_hash[i]; // Pointe vers le premier nœud de la liste chaînée
+        // Parcourt la liste chaînée pour libérer chaque nœud
         while (courant != NULL) {
-            NoeudHash* temp = courant;
-            courant = courant->suivant;
-            free(temp);
+            NoeudHash* temp = courant; // Stocke l'adresse actuelle avant de passer au suivant
+            courant = courant->suivant; // Passe au nœud suivant dans la liste
+            free(temp); // Libère la mémoire du nœud actuel
         }
+        // Réinitialise la table de hachage à NULL après avoir libéré tous les nœuds
         analyse->table_hash[i] = NULL;
     }
 }
 
+// Vérifie si un caractère fait partie d'un mot valide
 int estCaractereMot(wchar_t c) {
+    // Retourne vrai si le caractère est alphanumérique (lettre ou chiffre),
+    // ou s'il s'agit d'un tiret, d'une apostrophe ou d'un underscore
     return iswalnum(c) || c == L'-' || c == L'\'' || c == L'_';
 }
 
+// Normalise un mot en le convertissant en minuscules et en retirant les caractères non valides
 void normaliserMot(wchar_t* mot) {
-    int i, j = 0;
+    int i, j = 0; // `i` parcourt le mot d'origine, `j` construit le mot normalisé
     for (i = 0; mot[i]; i++) {
+        // Si le caractère actuel est valide (fait partie d'un mot)
         if (estCaractereMot(mot[i])) {
-            mot[j] = towlower(mot[i]);
-            j++;
+            mot[j] = towlower(mot[i]); // Convertit le caractère en minuscule
+            j++; // Avance l'indice pour le mot normalisé
         }
     }
-    mot[j] = L'\0';
+    mot[j] = L'\0'; // Termine la chaîne de caractères normalisée avec un caractère nul
 }
 
-void afficherTempsExecution(struct timespec debut, struct timespec fin, const char* nom_fonction) {
-    double duree = (fin.tv_sec - debut.tv_sec) + (fin.tv_nsec - debut.tv_nsec) / 1e9;
-    printf("Temps d'exécution (%s): %.3f s\n", nom_fonction, duree);
-}
-
+// Calcule la valeur de hachage d'un mot pour la table de hachage
 unsigned int calculerHash(const wchar_t* mot) {
-    unsigned int hash = 5381;
-    int c;
+    unsigned int hash = 5381; // Initialisation de la valeur de hachage avec une constante
+    int c; // Variable pour stocker chaque caractère du mot
+    // Parcourt chaque caractère du mot jusqu'à la fin de la chaîne
     while ((c = *mot++)) {
+        // Applique l'algorithme de hachage de type DJB2 : hash = hash * 33 + c
         hash = ((hash << 5) + hash) + c;
     }
+    // Retourne la valeur de hachage modulo la taille de la table pour rester dans les limites
     return hash % TAILLE_HASHTABLE;
 }
 
+// Détecte les types grammaticaux d'un mot (nom propre ou verbe)
 void detecterTypeMot(Mot* mot) {
-    int len = wcslen(mot->mot);
+    int len = wcslen(mot->mot); // Calcule la longueur du mot
+    // Vérifie si le mot commence par une lettre majuscule, indiquant un nom propre
     mot->est_nom_propre = iswupper(mot->mot[0]);
-    mot->est_verbe = 0;
-    
+    mot->est_verbe = 0; // Initialise à 0, supposant que le mot n'est pas un verbe
+    // Si le mot a plus de 2 caractères, vérifie les terminaisons possibles d'un verbe
     if (len > 2) {
-        wchar_t* fin = mot->mot + len - 2;
+        wchar_t* fin = mot->mot + len - 2; // Pointe vers les deux derniers caractères
+        // Vérifie si le mot se termine par "er", "ir", ou "re" (indicateurs de verbes)
         if (wcscmp(fin, L"er") == 0 || wcscmp(fin, L"ir") == 0 ||
             (len > 3 && wcscmp(fin-1, L"re") == 0)) {
-            mot->est_verbe = 1;
+            mot->est_verbe = 1; // Marque le mot comme un verbe
         }
     }
 }
 
+// Calcule la complexité textuelle en fonction de plusieurs métriques
 double calculerComplexiteTexte(const AnalyseTexte* analyse) {
     return (
-        0.3 * analyse->longueur_phrase_moyenne +
-        0.2 * analyse->diversite_lexicale * 100 +
-        0.2 * ((double)analyse->nb_verbes / analyse->nb_mots_total) * 100 +
-        0.15 * ((double)analyse->nb_mots_uniques / analyse->nb_mots_total) * 100 +
-        0.15 * analyse->longueur_mot_moyenne
+        0.3 * analyse->longueur_phrase_moyenne + // Pondère la longueur moyenne des phrases
+        0.2 * analyse->diversite_lexicale * 100 + // Pondère la diversité lexicale (en pourcentage)
+        0.2 * ((double)analyse->nb_verbes / analyse->nb_mots_total) * 100 + // Pondère le ratio de verbes
+        0.15 * ((double)analyse->nb_mots_uniques / analyse->nb_mots_total) * 100 + // Pondère la diversité des mots uniques
+        0.15 * analyse->longueur_mot_moyenne // Pondère la longueur moyenne des mots
     );
 }
-
+// Ajoute un mot à la table de hachage dans l'analyse
 void ajouterMot(AnalyseTexte* analyse, const wchar_t* mot) {
+    // Calcule l'index de hachage pour le mot
     unsigned int index = calculerHash(mot);
+    // Récupère le premier noeud dans la liste chaînée à cet index
     NoeudHash* courant = analyse->table_hash[index];
 
+    // Parcourt la liste chaînée pour vérifier si le mot existe déjà
     while (courant != NULL) {
-        if (wcscmp(courant->mot.mot, mot) == 0) {
-            courant->mot.frequence++;
-            return;
+        if (wcscmp(courant->mot.mot, mot) == 0) { // Si le mot est trouvé
+            courant->mot.frequence++; // Incrémente sa fréquence
+            return; // Fin de la fonction
         }
-        courant = courant->suivant;
+        courant = courant->suivant; // Passe au noeud suivant
     }
 
+    // Si le mot n'est pas trouvé, on l'ajoute comme un nouveau noeud
     NoeudHash* nouveau = (NoeudHash*)malloc(sizeof(NoeudHash));
-    wcscpy(nouveau->mot.mot, mot);
-    nouveau->mot.frequence = 1;
-    nouveau->mot.longueur = wcslen(mot);
-    detecterTypeMot(&nouveau->mot);
-    nouveau->suivant = analyse->table_hash[index];
-    analyse->table_hash[index] = nouveau;
-    analyse->nb_mots_uniques++;
+    if (!nouveau) { // Vérifie si l'allocation mémoire a échoué
+        perror("Erreur d'allocation mémoire");
+        exit(EXIT_FAILURE); // Termine le programme avec une erreur
+    }
 
+    // Copie le mot dans la structure du noeud
+    wcscpy(nouveau->mot.mot, mot);
+    nouveau->mot.frequence = 1; // Initialise la fréquence à 1
+    nouveau->mot.longueur = wcslen(mot); // Calcule la longueur du mot
+    detecterTypeMot(&nouveau->mot); // Détecte les propriétés grammaticales du mot
+    nouveau->suivant = analyse->table_hash[index]; // Pointe vers l'ancien premier noeud
+    analyse->table_hash[index] = nouveau; // Met à jour la tête de la liste
+    analyse->nb_mots_uniques++; // Incrémente le compteur de mots uniques
+
+    // Met à jour les statistiques si le mot est un verbe ou un nom propre
     if (nouveau->mot.est_verbe) analyse->nb_verbes++;
     if (nouveau->mot.est_nom_propre) analyse->nb_noms_propres++;
 }
 
 void afficherTop10(const AnalyseTexte* analyse) {
-    Mot mots[NB_MOTS_MAX];
+    if (analyse->nb_mots_uniques == 0) {
+        printf("Aucun mot à afficher.\n");
+        return;
+    }
+
+    // Allocation dynamique du tableau de mots
+    Mot* mots = (Mot*)malloc(analyse->nb_mots_uniques * sizeof(Mot));
+    if (mots == NULL) {
+        printf("Erreur d'allocation mémoire\n");
+        return;
+    }
+
     int nb_mots = 0;
 
-    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
+    // Collecte des mots depuis la table de hachage
+    for (int i = 0; i < TAILLE_HASHTABLE && nb_mots < analyse->nb_mots_uniques; i++) {
         NoeudHash* courant = analyse->table_hash[i];
-        while (courant != NULL && nb_mots < NB_MOTS_MAX) {
-            mots[nb_mots++] = courant->mot;
+        while (courant != NULL && nb_mots < analyse->nb_mots_uniques) {
+            mots[nb_mots] = courant->mot;
+            nb_mots++;
             courant = courant->suivant;
         }
     }
 
+    // Tri des 10 premiers mots par fréquence
     for (int i = 0; i < 10 && i < nb_mots; i++) {
         int max_idx = i;
         for (int j = i + 1; j < nb_mots; j++) {
@@ -162,10 +203,24 @@ void afficherTop10(const AnalyseTexte* analyse) {
         }
     }
 
-    printf("\nTop 10 des mots les plus fréquents:\n");
+    // Affichage des résultats
+    printf("\nTop %d des mots les plus fréquents:\n", (nb_mots < 10) ? nb_mots : 10);
+    printf("-----------------------------------\n");
     for (int i = 0; i < 10 && i < nb_mots; i++) {
-        printf("%ls: %d occurrences\n", mots[i].mot, mots[i].frequence);
+        printf("%d. %ls : %d occurrence%s",
+            i + 1,
+            mots[i].mot,
+            mots[i].frequence,
+            mots[i].frequence > 1 ? "s" : "");
+
+        if (mots[i].est_verbe) printf(" (verbe)");
+        if (mots[i].est_nom_propre) printf(" (nom propre)");
+        printf("\n");
     }
+    printf("-----------------------------------\n");
+
+    // Libération de la mémoire
+    free(mots);
 }
 /* Vérifie si une chaîne est un palindrome */
 int estPalindrome(const wchar_t* texte) {
@@ -324,9 +379,6 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
         exit(EXIT_FAILURE);
     }
 
-    struct timespec debut, fin;
-    clock_gettime(CLOCK_MONOTONIC, &debut);
-
     wchar_t mot_courant[LONGUEUR_MOT_MAX];
     wint_t c;
     int pos_mot = 0;
@@ -388,9 +440,6 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
 
     analyse->diversite_lexicale = (double)analyse->nb_mots_uniques / analyse->nb_mots_total;
     analyse->complexite_texte = calculerComplexiteTexte(analyse);
-
-    clock_gettime(CLOCK_MONOTONIC, &fin);
-    afficherTempsExecution(debut, fin, "analyserFichier");
 
     fclose(fichier);
 }
