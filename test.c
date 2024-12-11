@@ -5,40 +5,38 @@
 #include <wchar.h>
 #include <wctype.h>
 #include <locale.h>
-#include <ctype.h>
 #include <math.h>
 
-#define LONGUEUR_MOT_MAX 50
-#define NB_MOTS_MAX 20000
-#define LONGUEUR_CHEMIN_MAX 256
-#define TAILLE_HASHTABLE 10007
+#define LONGUEUR_MOT_MAX 50      
+#define NB_MOTS_MAX 20000        
+#define LONGUEUR_CHEMIN_MAX 256  
+#define TAILLE_HASHTABLE 10007   
 
 typedef struct {
     wchar_t mot[LONGUEUR_MOT_MAX];
-    int frequence;
-    int longueur;
-    int est_verbe;
-    int est_nom_propre;
+    int frequence;                   
+    int longueur;                    
+    int est_verbe;                   
+    int est_nom_propre;              
 } Mot;
 
 typedef struct NoeudHash {
-    Mot mot;
-    struct NoeudHash* suivant;
+    Mot mot;                     
+    struct NoeudHash* suivant;   
 } NoeudHash;
 
 typedef struct {
-    int nb_mots_total;
-    int nb_mots_uniques;
-    int nb_phrases;
-    int nb_paragraphes;
-    double longueur_mot_moyenne;
-    double longueur_phrase_moyenne;
-    double diversite_lexicale;
-    double densite_lexicale;
-    double complexite_texte;
-    int nb_verbes;
-    int nb_noms_propres;
-    NoeudHash* table_hash[TAILLE_HASHTABLE];
+    int nb_mots_total;          
+    int nb_mots_uniques;        
+    int nb_phrases;             
+    int nb_paragraphes;         
+    double longueur_mot_moyenne;    
+    double longueur_phrase_moyenne; 
+    double diversite_lexicale;      
+    double complexite_texte;        
+    int nb_verbes;              
+    int nb_noms_propres;        
+    NoeudHash* table_hash[TAILLE_HASHTABLE];  
 } AnalyseTexte;
 
 void initialiserAnalyse(AnalyseTexte* analyse) {
@@ -93,6 +91,7 @@ void detecterTypeMot(Mot* mot) {
     int len = wcslen(mot->mot);
     mot->est_nom_propre = iswupper(mot->mot[0]);
     mot->est_verbe = 0;
+    
     if (len > 2) {
         wchar_t* fin = mot->mot + len - 2;
         if (wcscmp(fin, L"er") == 0 || wcscmp(fin, L"ir") == 0 ||
@@ -137,22 +136,6 @@ void ajouterMot(AnalyseTexte* analyse, const wchar_t* mot) {
     if (nouveau->mot.est_nom_propre) analyse->nb_noms_propres++;
 }
 
-void afficherMenuMetriques(void) {
-    printf("\nMétriques disponibles:\n");
-    printf("1. Nombre total de mots\n");
-    printf("2. Nombre de mots uniques\n");
-    printf("3. Nombre de phrases\n");
-    printf("4. Nombre de paragraphes\n");
-    printf("5. Longueur moyenne des phrases\n");
-    printf("6. Diversité lexicale\n");
-    printf("7. Complexité du texte\n");
-    printf("8. Nombre de verbes\n");
-    printf("9. Nombre de noms propres\n");
-    printf("10. Top 10 des mots\n");
-    printf("11. Fréquence complète des mots\n");
-    printf("0. Retour au menu précédent\n");
-}
-
 void afficherTop10(const AnalyseTexte* analyse) {
     Mot mots[NB_MOTS_MAX];
     int nb_mots = 0;
@@ -184,6 +167,63 @@ void afficherTop10(const AnalyseTexte* analyse) {
         printf("%ls: %d occurrences\n", mots[i].mot, mots[i].frequence);
     }
 }
+/* Vérifie si une chaîne est un palindrome */
+int estPalindrome(const wchar_t* texte) {
+    if (!texte || !*texte) return 0;
+
+    size_t len = wcslen(texte);
+    wchar_t* texte_normalise = (wchar_t*)malloc((len + 1) * sizeof(wchar_t));
+    if (!texte_normalise) return 0;
+
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (iswalnum(texte[i])) {
+            texte_normalise[j++] = towlower(texte[i]);
+        }
+    }
+    texte_normalise[j] = L'\0';
+
+    size_t debut = 0;
+    size_t fin = j - 1;
+    int est_palindrome = 1;
+
+    while (debut < fin) {
+        if (texte_normalise[debut] != texte_normalise[fin]) {
+            est_palindrome = 0;
+            break;
+        }
+        debut++;
+        fin--;
+    }
+
+    free(texte_normalise);
+    return est_palindrome;
+}
+
+/* Trouve et affiche les palindromes */
+void trouverPalindromes(const AnalyseTexte* analyse) {
+    printf("\nRecherche des palindromes dans le texte:\n");
+    int palindromes_trouves = 0;
+
+    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
+        NoeudHash* courant = analyse->table_hash[i];
+        while (courant != NULL) {
+            if (wcslen(courant->mot.mot) > 2 && estPalindrome(courant->mot.mot)) {
+                printf("%ls (fréquence: %d)\n",
+                       courant->mot.mot,
+                       courant->mot.frequence);
+                palindromes_trouves++;
+            }
+            courant = courant->suivant;
+        }
+    }
+
+    if (palindromes_trouves == 0) {
+        printf("Aucun palindrome trouvé dans le texte.\n");
+    } else {
+        printf("\nTotal des palindromes trouvés: %d\n", palindromes_trouves);
+    }
+}
 
 void afficherFrequenceComplete(const AnalyseTexte* analyse) {
     printf("\nFréquence complète des mots:\n");
@@ -198,6 +238,27 @@ void afficherFrequenceComplete(const AnalyseTexte* analyse) {
         }
     }
 }
+
+void afficherMenuMetriques(void) {
+    printf("\nMétriques disponibles:\n");
+    printf("1. Nombre total de mots\n");
+    printf("2. Nombre de mots uniques\n");
+    printf("3. Nombre de phrases\n");
+    printf("4. Nombre de paragraphes\n");
+    printf("5. Longueur moyenne des phrases\n");
+    printf("6. Diversité lexicale\n");
+    printf("7. Complexité du texte\n");
+    printf("8. Nombre de verbes\n");
+    printf("9. Nombre de noms propres\n");
+    printf("10. Top 10 des mots\n");
+    printf("11. Fréquence complète des mots\n");
+    printf("12. Rechercher les palindromes\n");
+    printf("0. Retour au menu précédent\n");
+}
+
+// 3. Ajouter ce case dans la fonction afficherMetriqueSpecifique
+// (juste après le case 11)
+
 
 void afficherMetriqueSpecifique(const AnalyseTexte* analyse, int choix) {
     switch (choix) {
@@ -234,9 +295,28 @@ void afficherMetriqueSpecifique(const AnalyseTexte* analyse, int choix) {
         case 11:
             afficherFrequenceComplete(analyse);
             break;
+        case 12:
+            trouverPalindromes(analyse);
+        break;
     }
 }
 
+void menuAnalyseFichierUnique(AnalyseTexte* analyse) {
+    int choix;
+    
+    do {
+        afficherMenuMetriques();
+        printf("\nChoisissez une métrique (0 pour revenir): ");
+        scanf("%d", &choix);
+        getchar();
+
+        if (choix >= 1 && choix <= 12) {
+            afficherMetriqueSpecifique(analyse, choix);
+        } else if (choix != 0) {
+            printf("Choix invalide\n");
+        }
+    } while (choix != 0);
+}
 void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     FILE* fichier = fopen(chemin, "r");
     if (fichier == NULL) {
@@ -288,6 +368,20 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
         }
     }
 
+    // Traiter le dernier mot s'il y en a un
+    if (en_mot) {
+        mot_courant[pos_mot] = L'\0';
+        normaliserMot(mot_courant);
+        ajouterMot(analyse, mot_courant);
+    }
+
+    // Traiter la dernière phrase si elle ne se termine pas par un point
+    if (mots_dans_phrase > 0) {
+        analyse->nb_phrases++;
+        analyse->longueur_phrase_moyenne += mots_dans_phrase;
+    }
+
+    // Calcul des moyennes et métriques finales
     if (analyse->nb_phrases > 0) {
         analyse->longueur_phrase_moyenne /= analyse->nb_phrases;
     }
@@ -301,23 +395,6 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     fclose(fichier);
 }
 
-void menuAnalyseFichierUnique(AnalyseTexte* analyse) {
-    int choix;
-
-    while (1) {
-        afficherMenuMetriques();
-        printf("\nChoisissez une métrique (0 pour revenir): ");
-        scanf("%d", &choix);
-        getchar();
-
-        if (choix == 0) break;
-        if (choix >= 1 && choix <= 11) {
-            afficherMetriqueSpecifique(analyse, choix);
-        } else {
-            printf("Choix invalide\n");
-        }
-    }
-}
 
 void menuComparaisonFichiers(const char* chemin1, const char* chemin2) {
     AnalyseTexte analyse1, analyse2;
@@ -329,12 +406,17 @@ void menuComparaisonFichiers(const char* chemin1, const char* chemin2) {
     analyserFichier(chemin1, &analyse1);
     analyserFichier(chemin2, &analyse2);
 
-    while (1) {
+    do {
         printf("\nMenu de comparaison:\n");
         printf("1. Voir métriques du premier fichier\n");
         printf("2. Voir métriques du deuxième fichier\n");
         printf("3. Voir comparaison des métriques\n");
-        printf("4. Calculer similarité\n");
+        printf("4. Top 10 des mots du premier fichier\n");
+        printf("5. Top 10 des mots du deuxième fichier\n");
+        printf("6. Fréquence complète des mots du premier fichier\n");
+        printf("7. Fréquence complète des mots du deuxième fichier\n");
+        printf("8. Palindromes du premier fichier\n");
+        printf("9. Palindromes du deuxième fichier\n");
         printf("0. Retour au menu principal\n");
         printf("Choix: ");
         scanf("%d", &choix);
@@ -342,9 +424,7 @@ void menuComparaisonFichiers(const char* chemin1, const char* chemin2) {
 
         switch (choix) {
             case 0:
-                libererAnalyse(&analyse1);
-                libererAnalyse(&analyse2);
-                return;
+                break;
 
             case 1:
                 printf("\nAnalyse du fichier 1: %s\n", chemin1);
@@ -364,8 +444,8 @@ void menuComparaisonFichiers(const char* chemin1, const char* chemin2) {
                     abs(analyse1.nb_mots_uniques - analyse2.nb_mots_uniques));
                 printf("Différence de phrases: %d\n",
                     abs(analyse1.nb_phrases - analyse2.nb_phrases));
-               /* printf("Différence de longueur moyenne des printf("Différence de longueur moyenne des phrases: %.2f\n",
-                 */   fabs(analyse1.longueur_phrase_moyenne - analyse2.longueur_phrase_moyenne);
+                printf("Différence de longueur moyenne des phrases: %.2f\n",
+                    fabs(analyse1.longueur_phrase_moyenne - analyse2.longueur_phrase_moyenne));
                 printf("Différence de diversité lexicale: %.2f%%\n",
                     fabs(analyse1.diversite_lexicale - analyse2.diversite_lexicale) * 100);
                 printf("Différence de complexité: %.2f\n",
@@ -375,58 +455,44 @@ void menuComparaisonFichiers(const char* chemin1, const char* chemin2) {
                 printf("Différence de noms propres: %d\n",
                     abs(analyse1.nb_noms_propres - analyse2.nb_noms_propres));
                 break;
-
-            /*case 4: {
-                // Calculer un score de similarité simple basé sur plusieurs métriques
-                double score = 0.0;
-
-
-                // Similarité basée sur la diversité lexicale (0-20 points)
-                double diff_diversite = fabs(analyse1.diversite_lexicale - analyse2.diversite_lexicale);
-                score += (1 - diff_diversite) * 20;
-
-                // Similarité basée sur la longueur moyenne des phrases (0-20 points)
-                double ratio_longueur = MIN(analyse1.longueur_phrase_moyenne, analyse2.longueur_phrase_moyenne) /
-                                      MAX(analyse1.longueur_phrase_moyenne, analyse2.longueur_phrase_moyenne);
-                score += ratio_longueur * 20;
-
-                // Similarité basée sur la complexité (0-20 points)
-                double ratio_complexite = MIN(analyse1.complexite_texte, analyse2.complexite_texte) /
-                                        MAX(analyse1.complexite_texte, analyse2.complexite_texte);
-                score += ratio_complexite * 20;
-
-                // Similarité basée sur la proportion de verbes et noms propres (0-20 points)
-                double ratio_verbes = (double)MIN(analyse1.nb_verbes, analyse2.nb_verbes) /
-                                    MAX(analyse1.nb_verbes, analyse2.nb_verbes);
-                double ratio_noms = (double)MIN(analyse1.nb_noms_propres, analyse2.nb_noms_propres) /
-                                  MAX(analyse1.nb_noms_propres, analyse2.nb_noms_propres);
-                score += ((ratio_verbes + ratio_noms) / 2) * 20;
-
-                printf("\nScore de similarité: %.2f/100\n", score);
-                printf("Interprétation:\n");
-                if (score >= 90) {
-                    printf("Les textes sont très similaires\n");
-                } else if (score >= 70) {
-                    printf("Les textes présentent une forte similarité\n");
-                } else if (score >= 50) {
-                    printf("Les textes ont une similarité modérée\n");
-                } else if (score >= 30) {
-                    printf("Les textes sont assez différents\n");
-                } else {
-                    printf("Les textes sont très différents\n");
-                }
-                break;
-            }*/
+            case 4:
+                printf("\nTop 10 des mots du premier fichier:\n");
+            afficherTop10(&analyse1);
+            break;
+            case 5:
+                printf("\nTop 10 des mots du deuxième fichier:\n");
+            afficherTop10(&analyse2);
+            break;
+            case 6:
+                printf("\nFréquence complète des mots du premier fichier:\n");
+            afficherFrequenceComplete(&analyse1);
+            break;
+            case 7:
+                printf("\nFréquence complète des mots du deuxième fichier:\n");
+            afficherFrequenceComplete(&analyse2);
+            break;
+            case 8:
+                printf("\nPalindromes du premier fichier:\n");
+            trouverPalindromes(&analyse1);
+            break;
+            case 9:
+                printf("\nPalindromes du deuxième fichier:\n");
+            trouverPalindromes(&analyse2);
+            break;
 
             default:
                 printf("Choix invalide\n");
                 break;
         }
-    }
+    } while (choix != 0);
+
+    libererAnalyse(&analyse1);
+    libererAnalyse(&analyse2);
 }
 
+
 int main() {
-    setlocale(LC_ALL, "");
+    setlocale(LC_ALL, "");  // Support des caractères Unicode
     char chemin1[LONGUEUR_CHEMIN_MAX];
     char chemin2[LONGUEUR_CHEMIN_MAX];
     int choix;
