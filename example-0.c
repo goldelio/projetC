@@ -51,6 +51,9 @@ typedef struct {
     GtkWidget *result_label;
     GtkWidget *window;
     AnalyseTexte* current_analysis;
+    GtkWidget *result_text_view;       // For long results
+    GtkWidget *result_scroll_window;   // Scrollable container
+    GtkTextBuffer *result_buffer;      // Text buffer for text view
 } MenuWidgets;
 
 
@@ -178,7 +181,14 @@ void ajouterMot(AnalyseTexte* analyse, const wchar_t* mot) {
     if (nouveau->mot.est_verbe) analyse->nb_verbes++;
     if (nouveau->mot.est_nom_propre) analyse->nb_noms_propres++;
 }
-/*
+
+static char* wchar_to_utf8(const wchar_t* str) {
+    static char buffer[8192];  // Static buffer for the converted string
+    memset(buffer, 0, sizeof(buffer));
+    wcstombs(buffer, str, sizeof(buffer) - 1);
+    return buffer;
+}
+
 void afficherTop10(const AnalyseTexte* analyse) {
     if (analyse->nb_mots_uniques == 0) {
         printf("Aucun mot à afficher.\n");
@@ -238,9 +248,7 @@ void afficherTop10(const AnalyseTexte* analyse) {
     // Libération de la mémoire
     free(mots);
 }
-*/
 /* Vérifie si une chaîne est un palindrome */
-/*
 int estPalindrome(const wchar_t* texte) {
     if (!texte || !*texte) return 0;
 
@@ -272,9 +280,9 @@ int estPalindrome(const wchar_t* texte) {
     free(texte_normalise);
     return est_palindrome;
 }
-*/
+
 /* Trouve et affiche les palindromes */
-/*
+
 void trouverPalindromes(const AnalyseTexte* analyse) {
     printf("\nRecherche des palindromes dans le texte:\n");
     int palindromes_trouves = 0;
@@ -312,7 +320,7 @@ void afficherFrequenceComplete(const AnalyseTexte* analyse) {
         }
     }
 }
-*/
+
 
 void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     FILE* fichier = fopen(chemin, "r");
@@ -386,24 +394,184 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     fclose(fichier);
 }
 
-// Dummy functions for metrics
-//static void total_words(const AnalyseTexte* analyse) { printf("Called: Total Words Counter\n");printf("Total Words: %d\n", analyse->nb_mots_total); }
-static void total_words(const AnalyseTexte* analyse) {
-    char result[100];
+// analysis functions for metrics
+static char* total_words(const AnalyseTexte* analyse) {
+    static char result[100];
     snprintf(result, sizeof(result), "Total Words: %d", analyse->nb_mots_total);
-    printf("%s\n", result);
+    return result;
 }
-static void unique_words(const AnalyseTexte* analyse) { printf("Called: Unique Words Counter\n"); }
-static void sentence_count(const AnalyseTexte* analyse) { printf("Called: Sentence Counter\n"); }
-static void paragraph_count(const AnalyseTexte* analyse) { printf("Called: Paragraph Counter\n"); }
-static void avg_sentence_length(const AnalyseTexte* analyse) { printf("Called: Average Sentence Length\n"); }
-static void lexical_diversity(const AnalyseTexte* analyse) { printf("Called: Lexical Diversity\n"); }
-static void text_complexity(const AnalyseTexte* analyse) { printf("Called: Text Complexity\n"); }
-static void verb_count(const AnalyseTexte* analyse) { printf("Called: Verb Counter\n"); }
-static void proper_noun_count(const AnalyseTexte* analyse) { printf("Called: Proper Noun Counter\n"); }
-static void top_ten_words() { printf("Called: Top 10 Words\n"); }
-static void word_frequency() { printf("Called: Complete Word Frequency\n"); }
-static void find_palindromes() { printf("Called: Palindrome Finder\n"); }
+
+static char* unique_words(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Unique Words: %d", analyse->nb_mots_uniques);
+    return result;
+}
+
+static char* sentence_count(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Sentences: %d", analyse->nb_phrases);
+    return result;
+}
+
+static char* paragraph_count(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Paragraphs: %d", analyse->nb_paragraphes);
+    return result;
+}
+
+static char* avg_sentence_length(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Average Sentence Length: %.2f words", analyse->longueur_phrase_moyenne);
+    return result;
+}
+
+static char* lexical_diversity(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Lexical Diversity: %.2f%%", analyse->diversite_lexicale * 100);
+    return result;
+}
+
+static char* text_complexity(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Text Complexity: %.2f", analyse->complexite_texte);
+    return result;
+}
+
+static char* verb_count(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Verbs: %d", analyse->nb_verbes);
+    return result;
+}
+
+static char* proper_noun_count(const AnalyseTexte* analyse) {
+    static char result[100];
+    snprintf(result, sizeof(result), "Proper Nouns: %d", analyse->nb_noms_propres);
+    return result;
+}
+/*
+static void top_ten_words(const AnalyseTexte* analyse) { 
+    afficherTop10(analyse);
+}
+static void word_frequency(const AnalyseTexte* analyse) { 
+    afficherFrequenceComplete(analyse);
+ }
+static void find_palindromes(const AnalyseTexte* analyse) { 
+    trouverPalindromes(analyse);
+}
+*/
+
+static char* get_top_ten_words(const AnalyseTexte* analyse) {
+    static char result[8192];
+    char temp[256];
+    result[0] = '\0';
+
+    if (analyse->nb_mots_uniques == 0) {
+        strcat(result, "No words to display.\n");
+        return result;
+    }
+
+    Mot* mots = (Mot*)malloc(analyse->nb_mots_uniques * sizeof(Mot));
+    if (mots == NULL) {
+        strcat(result, "Memory allocation error\n");
+        return result;
+    }
+
+    int nb_mots = 0;
+    for (int i = 0; i < TAILLE_HASHTABLE && nb_mots < analyse->nb_mots_uniques; i++) {
+        NoeudHash* courant = analyse->table_hash[i];
+        while (courant != NULL && nb_mots < analyse->nb_mots_uniques) {
+            mots[nb_mots] = courant->mot;
+            nb_mots++;
+            courant = courant->suivant;
+        }
+    }
+
+    for (int i = 0; i < 10 && i < nb_mots; i++) {
+        int max_idx = i;
+        for (int j = i + 1; j < nb_mots; j++) {
+            if (mots[j].frequence > mots[max_idx].frequence) {
+                max_idx = j;
+            }
+        }
+        if (max_idx != i) {
+            Mot temp_mot = mots[i];
+            mots[i] = mots[max_idx];
+            mots[max_idx] = temp_mot;
+        }
+    }
+
+    strcat(result, "Top words by frequency:\n\n");
+    for (int i = 0; i < 10 && i < nb_mots; i++) {
+        snprintf(temp, sizeof(temp), "%d. %s: %d occurrence%s%s%s\n",
+                i + 1,
+                wchar_to_utf8(mots[i].mot),  // Convert to UTF-8
+                mots[i].frequence,
+                mots[i].frequence > 1 ? "s" : "",
+                mots[i].est_verbe ? " (verb)" : "",
+                mots[i].est_nom_propre ? " (proper noun)" : "");
+        strcat(result, temp);
+    }
+
+    free(mots);
+    return result;
+}
+
+static char* get_palindromes(const AnalyseTexte* analyse) {
+    static char result[8192];
+    char temp[256];
+    int palindromes_trouves = 0;
+    
+    result[0] = '\0';
+    strcat(result, "Palindromes found in text:\n\n");
+
+    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
+        NoeudHash* courant = analyse->table_hash[i];
+        while (courant != NULL) {
+            if (wcslen(courant->mot.mot) > 2 && estPalindrome(courant->mot.mot)) {
+                snprintf(temp, sizeof(temp), "%s (frequency: %d)\n",
+                        wchar_to_utf8(courant->mot.mot),  // Convert to UTF-8
+                        courant->mot.frequence);
+                strcat(result, temp);
+                palindromes_trouves++;
+            }
+            courant = courant->suivant;
+        }
+    }
+
+    if (palindromes_trouves == 0) {
+        strcat(result, "No palindromes found in text.\n");
+    } else {
+        snprintf(temp, sizeof(temp), "\nTotal palindromes found: %d\n", palindromes_trouves);
+        strcat(result, temp);
+    }
+
+    return result;
+}
+
+static char* get_word_frequency(const AnalyseTexte* analyse) {
+    static char result[8192];
+    char temp[256];
+    
+    result[0] = '\0';
+    strcat(result, "Complete word frequency:\n\n");
+
+    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
+        NoeudHash* courant = analyse->table_hash[i];
+        while (courant != NULL) {
+            snprintf(temp, sizeof(temp), "%s: %d occurrence%s%s%s\n",
+                    wchar_to_utf8(courant->mot.mot),  // Convert to UTF-8
+                    courant->mot.frequence,
+                    courant->mot.frequence > 1 ? "s" : "",
+                    courant->mot.est_verbe ? " (verb)" : "",
+                    courant->mot.est_nom_propre ? " (proper noun)" : "");
+            strcat(result, temp);
+            courant = courant->suivant;
+        }
+    }
+
+    return result;
+}
+
 
 static void show_main_menu(MenuWidgets *widgets) {
     gtk_widget_set_visible(widgets->main_menu_box, TRUE);
@@ -493,24 +661,64 @@ static void on_compare_files(GtkWidget *button, gpointer user_data) {
 static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     const char *label = gtk_button_get_label(GTK_BUTTON(button));
+    char *result = NULL;
     
     if (!widgets->current_analysis) {
         gtk_label_set_text(GTK_LABEL(widgets->result_label), "No file analyzed yet!");
+        gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
+        gtk_widget_set_visible(widgets->result_label, TRUE);
         return;
     }
     
-    if (strstr(label, "1. Total Words")) total_words(widgets->current_analysis);
-    else if (strstr(label, "2. Unique Words")) unique_words(widgets->current_analysis);
-    else if (strstr(label, "3. Sentences")) sentence_count(widgets->current_analysis);
-    else if (strstr(label, "4. Paragraphs")) paragraph_count(widgets->current_analysis);
-    else if (strstr(label, "5. Average Sentence Length")) avg_sentence_length(widgets->current_analysis);
-    else if (strstr(label, "6. Lexical Diversity")) lexical_diversity(widgets->current_analysis);
-    else if (strstr(label, "7. Text Complexity")) text_complexity(widgets->current_analysis);
-    else if (strstr(label, "8. Verbs")) verb_count(widgets->current_analysis);
-    else if (strstr(label, "9. Proper Nouns")) proper_noun_count(widgets->current_analysis);
-    else if (strstr(label, "10. Top 10 Words")) top_ten_words();
-    else if (strstr(label, "11. Word Frequency")) word_frequency();
-    else if (strstr(label, "12. Palindromes")) find_palindromes();
+    // For shorter metrics, use label
+    if (strstr(label, "1. Total Words") ||
+        strstr(label, "2. Unique Words") ||
+        strstr(label, "3. Sentences") ||
+        strstr(label, "4. Paragraphs") ||
+        strstr(label, "5. Average Sentence Length") ||
+        strstr(label, "6. Lexical Diversity") ||
+        strstr(label, "7. Text Complexity") ||
+        strstr(label, "8. Verbs") ||
+        strstr(label, "9. Proper Nouns")) {
+        
+        if (strstr(label, "1. Total Words")) 
+            result = total_words(widgets->current_analysis);
+        else if (strstr(label, "2. Unique Words")) 
+            result = unique_words(widgets->current_analysis);
+        else if (strstr(label, "3. Sentences")) 
+            result = sentence_count(widgets->current_analysis);
+        else if (strstr(label, "4. Paragraphs")) 
+            result = paragraph_count(widgets->current_analysis);
+        else if (strstr(label, "5. Average Sentence Length")) 
+            result = avg_sentence_length(widgets->current_analysis);
+        else if (strstr(label, "6. Lexical Diversity")) 
+            result = lexical_diversity(widgets->current_analysis);
+        else if (strstr(label, "7. Text Complexity")) 
+            result = text_complexity(widgets->current_analysis);
+        else if (strstr(label, "8. Verbs")) 
+            result = verb_count(widgets->current_analysis);
+        else if (strstr(label, "9. Proper Nouns")) 
+            result = proper_noun_count(widgets->current_analysis);
+        
+        gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
+        gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
+        gtk_widget_set_visible(widgets->result_label, TRUE);
+    }
+    // For longer metrics, use scrollable text view
+    else {
+        if (strstr(label, "10. Top 10 Words")) 
+            result = get_top_ten_words(widgets->current_analysis);
+        else if (strstr(label, "11. Word Frequency")) 
+            result = get_word_frequency(widgets->current_analysis);
+        else if (strstr(label, "12. Palindromes")) 
+            result = get_palindromes(widgets->current_analysis);
+        
+        if (result) {
+            gtk_text_buffer_set_text(widgets->result_buffer, result, -1);
+            gtk_widget_set_visible(widgets->result_label, FALSE);
+            gtk_widget_set_visible(widgets->result_scroll_window, TRUE);
+        }
+    }
 }
 
 static void cleanup_widgets(MenuWidgets *widgets) {
@@ -596,9 +804,24 @@ static void on_activate(GtkApplication *app) {
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), compare_files_button);
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), back_button2);
 
+    
     // Result label
     widgets->result_label = gtk_label_new("");
     gtk_label_set_wrap(GTK_LABEL(widgets->result_label), TRUE);
+
+    // Create scrollable text view for long results
+    widgets->result_text_view = gtk_text_view_new();
+    widgets->result_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widgets->result_text_view));
+    widgets->result_scroll_window = gtk_scrolled_window_new();
+    
+    // Configure text view
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(widgets->result_text_view), GTK_WRAP_WORD);
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(widgets->result_text_view), FALSE);
+    
+    // Configure scroll window
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(widgets->result_scroll_window), 
+                                widgets->result_text_view);
+    gtk_widget_set_size_request(widgets->result_scroll_window, -1, 200); // Set minimum height
 
     // Add all containers to main box
     gtk_box_append(GTK_BOX(main_box), widgets->main_menu_box);
@@ -606,6 +829,11 @@ static void on_activate(GtkApplication *app) {
     gtk_box_append(GTK_BOX(main_box), widgets->metrics_menu_box);
     gtk_box_append(GTK_BOX(main_box), widgets->compare_menu_box);
     gtk_box_append(GTK_BOX(main_box), widgets->result_label);
+    gtk_box_append(GTK_BOX(main_box), widgets->result_scroll_window);
+
+    // Initially hide both result displays
+    gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
+    gtk_widget_set_visible(widgets->result_label, FALSE);
 
     // Connect signals
     g_signal_connect(quit_button, "clicked", G_CALLBACK(on_quit_clicked), widgets->window);
