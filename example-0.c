@@ -460,11 +460,77 @@ static void find_palindromes(const AnalyseTexte* analyse) {
 }
 */
 
+static void export_analysis(const AnalyseTexte* analyse) {
+    FILE* fichier = fopen("analyse.txt", "w");
+    if (fichier == NULL) {
+        perror("Erreur à l'ouverture du fichier");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(fichier, "Total Words: %d\n", analyse->nb_mots_total);
+    fprintf(fichier, "Unique Words: %d\n", analyse->nb_mots_uniques);
+    fprintf(fichier, "Sentences: %d\n", analyse->nb_phrases);
+    fprintf(fichier, "Paragraphs: %d\n", analyse->nb_paragraphes);
+    fprintf(fichier, "Average Sentence Length: %.2f words\n", analyse->longueur_phrase_moyenne);
+    fprintf(fichier, "Lexical Diversity: %.2f%%\n", analyse->diversite_lexicale * 100);
+    fprintf(fichier, "Text Complexity: %.2f\n", analyse->complexite_texte);
+    fprintf(fichier, "Verbs: %d\n", analyse->nb_verbes);
+    fprintf(fichier, "Proper Nouns: %d\n", analyse->nb_noms_propres);
+
+    fprintf(fichier, "\nComplete Word Frequency:\n");
+    fprintf(fichier, "---------------------------------\n");
+
+    // Count the number of unique words
+    int unique_words_count = 0;
+    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
+        NoeudHash* courant = analyse->table_hash[i];
+        while (courant != NULL) {
+            unique_words_count++;
+            courant = courant->suivant;
+        }
+    }
+
+    // Create an array to store the unique words and their frequencies
+    Mot* unique_words_array = malloc(unique_words_count * sizeof(Mot));
+    int index = 0;
+    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
+        NoeudHash* courant = analyse->table_hash[i];
+        while (courant != NULL) {
+            unique_words_array[index] = courant->mot;
+            index++;
+            courant = courant->suivant;
+        }
+    }
+
+    // Sort the array in ascending order of frequency
+    for (int i = 0; i < unique_words_count - 1; i++) {
+        for (int j = 0; j < unique_words_count - i - 1; j++) {
+            if (unique_words_array[j].frequence > unique_words_array[j + 1].frequence) {
+                Mot temp = unique_words_array[j];
+                unique_words_array[j] = unique_words_array[j + 1];
+                unique_words_array[j + 1] = temp;
+            }
+        }
+    }
+
+    // Print the sorted array to the file
+    for (int i = 0; i < unique_words_count; i++) {
+        fprintf(fichier, "%ls: %d occurrences", unique_words_array[i].mot, unique_words_array[i].frequence);
+        if (unique_words_array[i].est_verbe) fprintf(fichier, " (verbe)");
+        if (unique_words_array[i].est_nom_propre) fprintf(fichier, " (nom propre)");
+        fprintf(fichier, "\n");
+    }
+
+    free(unique_words_array);
+
+    fclose(fichier);
+}
+
 static char* get_top_ten_words(const AnalyseTexte* analyse) {
     static char result[8192];
-    char temp[256];
+    char temp[1024];  // Increased buffer size for UTF-8 characters
     result[0] = '\0';
-
+    
     if (analyse->nb_mots_uniques == 0) {
         strcat(result, "No words to display.\n");
         return result;
@@ -476,6 +542,7 @@ static char* get_top_ten_words(const AnalyseTexte* analyse) {
         return result;
     }
 
+    // Collect words from hash table
     int nb_mots = 0;
     for (int i = 0; i < TAILLE_HASHTABLE && nb_mots < analyse->nb_mots_uniques; i++) {
         NoeudHash* courant = analyse->table_hash[i];
@@ -486,6 +553,7 @@ static char* get_top_ten_words(const AnalyseTexte* analyse) {
         }
     }
 
+    // Sort first 10 words by frequency
     for (int i = 0; i < 10 && i < nb_mots; i++) {
         int max_idx = i;
         for (int j = i + 1; j < nb_mots; j++) {
@@ -501,17 +569,35 @@ static char* get_top_ten_words(const AnalyseTexte* analyse) {
     }
 
     strcat(result, "Top words by frequency:\n\n");
+
+    // Use wide character formatting
     for (int i = 0; i < 10 && i < nb_mots; i++) {
-        snprintf(temp, sizeof(temp), "%d. %s: %d occurrence%s%s%s\n",
-                i + 1,
-                wchar_to_utf8(mots[i].mot),  // Convert to UTF-8
+        temp[0] = '\0';  // Clear temp buffer
+        
+        // Convert the numeric parts and fixed strings to a temporary buffer
+        char prefix[64];
+        snprintf(prefix, sizeof(prefix), "%d. ", i + 1);
+        strcat(temp, prefix);
+        
+        // Convert wide string to multibyte
+        char word_buffer[512];
+        wcstombs(word_buffer, mots[i].mot, sizeof(word_buffer));
+        strcat(temp, word_buffer);
+        
+        // Add frequency and other information
+        char suffix[256];
+        snprintf(suffix, sizeof(suffix), ": %d occurrence%s%s%s\n",
                 mots[i].frequence,
                 mots[i].frequence > 1 ? "s" : "",
                 mots[i].est_verbe ? " (verb)" : "",
                 mots[i].est_nom_propre ? " (proper noun)" : "");
+        strcat(temp, suffix);
+        
+        // Add to final result
         strcat(result, temp);
     }
-
+    //printf("\ntop 10 mots:\n");
+    //printf(result);
     free(mots);
     return result;
 }
@@ -658,6 +744,36 @@ static void on_compare_files(GtkWidget *button, gpointer user_data) {
     gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
 }
 
+static void set_text_buffer_safely(GtkTextBuffer *buffer, const char *text) {
+    if (!text) {
+        gtk_text_buffer_set_text(buffer, "", -1);
+        return;
+    }
+
+    // First check if it's valid UTF-8
+    if (g_utf8_validate(text, -1, NULL)) {
+        // Text is valid UTF-8, use it directly
+        gtk_text_buffer_set_text(buffer, text, -1);
+        return;
+    }
+
+    // Text is not valid UTF-8, try to convert from local encoding
+    GError *error = NULL;
+    char *utf8_text = g_locale_to_utf8(text, -1, NULL, NULL, &error);
+    
+    if (utf8_text) {
+        // Successfully converted to UTF-8
+        gtk_text_buffer_set_text(buffer, utf8_text, -1);
+        g_free(utf8_text);
+    } else {
+        // Conversion failed
+        g_warning("Failed to conve rt text to UTF-8: %s", error->message);
+        g_error_free(error);
+        // Set a fallback message
+        gtk_text_buffer_set_text(buffer, "[Invalid text encoding]", -1);
+    }
+}
+
 static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     const char *label = gtk_button_get_label(GTK_BUTTON(button));
@@ -679,7 +795,8 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
         strstr(label, "6. Lexical Diversity") ||
         strstr(label, "7. Text Complexity") ||
         strstr(label, "8. Verbs") ||
-        strstr(label, "9. Proper Nouns")) {
+        strstr(label, "9. Proper Nouns")||
+        strstr(label, "13. Download analysis")) {
         
         if (strstr(label, "1. Total Words")) 
             result = total_words(widgets->current_analysis);
@@ -699,7 +816,10 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             result = verb_count(widgets->current_analysis);
         else if (strstr(label, "9. Proper Nouns")) 
             result = proper_noun_count(widgets->current_analysis);
-        
+        else if (strstr(label, "13. Download analysis")) 
+            export_analysis(widgets->current_analysis);
+            result = "Download analysis not implemented yet";
+
         gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
         gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
         gtk_widget_set_visible(widgets->result_label, TRUE);
@@ -712,12 +832,13 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             result = get_word_frequency(widgets->current_analysis);
         else if (strstr(label, "12. Palindromes")) 
             result = get_palindromes(widgets->current_analysis);
-        
         if (result) {
-            gtk_text_buffer_set_text(widgets->result_buffer, result, -1);
+            set_text_buffer_safely(widgets->result_buffer, result);
+            //gtk_text_buffer_set_text(widgets->result_buffer, result, -1);
             gtk_widget_set_visible(widgets->result_label, FALSE);
             gtk_widget_set_visible(widgets->result_scroll_window, TRUE);
         }
+        
     }
 }
 
@@ -777,10 +898,10 @@ static void on_activate(GtkApplication *app) {
         "4. Paragraphs", "5. Average Sentence Length",
         "6. Lexical Diversity", "7. Text Complexity",
         "8. Verbs", "9. Proper Nouns", "10. Top 10 Words",
-        "11. Word Frequency", "12. Palindromes"
+        "11. Word Frequency", "12. Palindromes", "13. Download analysis"
     };
 
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < 13; i++) {
         GtkWidget *metric_button = gtk_button_new_with_label(metric_labels[i]);
         g_signal_connect(metric_button, "clicked", G_CALLBACK(on_metric_clicked), widgets);  // Change NULL to widgets
         gtk_box_append(GTK_BOX(widgets->metrics_menu_box), metric_button);
