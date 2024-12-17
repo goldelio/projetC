@@ -269,7 +269,7 @@ void trouverPalindromes(const AnalyseTexte* analyse) {
                        courant->mot.frequence);
                 palindromes_trouves++;
             }
-            courant = courant->suivant;
+            courant = courant->suivant; // a
         }
     }
 
