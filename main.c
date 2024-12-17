@@ -47,10 +47,13 @@ typedef struct {
     GtkWidget *metrics_menu_box;
     GtkWidget *compare_menu_box;
     GtkWidget *entry_file1;
-    GtkWidget *entry_file2;
+    GtkWidget *entry_file_1;
+    GtkWidget *entry_file_2;
     GtkWidget *result_label;
     GtkWidget *window;
     AnalyseTexte* current_analysis;
+    AnalyseTexte* file1_analysis;
+    AnalyseTexte* file2_analysis;
     GtkWidget *result_text_view;       // For long results
     GtkWidget *result_scroll_window;   // Scrollable container
     GtkTextBuffer *result_buffer;      // Text buffer for text view
@@ -734,16 +737,6 @@ static void on_analyze_file(GtkWidget *button, gpointer user_data) {
     show_metrics_menu(widgets);
 }
 
-static void on_compare_files(GtkWidget *button, gpointer user_data) {
-    MenuWidgets *widgets = (MenuWidgets *)user_data;
-    const char *filepath1 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file1));
-    const char *filepath2 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file2));
-    
-    char result[256];
-    snprintf(result, sizeof(result), "Comparing files:\n%s\n%s", filepath1, filepath2);
-    gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
-}
-
 static void set_text_buffer_safely(GtkTextBuffer *buffer, const char *text) {
     if (!text) {
         gtk_text_buffer_set_text(buffer, "", -1);
@@ -773,6 +766,81 @@ static void set_text_buffer_safely(GtkTextBuffer *buffer, const char *text) {
         gtk_text_buffer_set_text(buffer, "[Invalid text encoding]", -1);
     }
 }
+
+static void on_compare_files(GtkWidget *button, gpointer user_data) {
+    MenuWidgets *widgets = (MenuWidgets *)user_data;
+    const char *filepath1 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file_1));
+    const char *filepath2 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file_2));
+    
+    // Create two separate analyses
+    AnalyseTexte *analyse1 = malloc(sizeof(AnalyseTexte));
+    AnalyseTexte *analyse2 = malloc(sizeof(AnalyseTexte));
+    
+    if (!analyse1 || !analyse2) {
+        gtk_label_set_text(GTK_LABEL(widgets->result_label), "Memory allocation error!");
+        free(analyse1);
+        free(analyse2);
+        return;
+    }
+
+    // Initialize and analyze both files
+    initialiserAnalyse(analyse1);
+    initialiserAnalyse(analyse2);
+    analyserFichier(filepath1, analyse1);
+    analyserFichier(filepath2, analyse2);
+
+    // Create formatted comparison text
+    char result[4096];
+    snprintf(result, sizeof(result),
+        "Comparison of metrics between files:\n\n"
+        "Total Words difference: %d\n"
+        "Unique Words difference: %d\n"
+        "Sentences difference: %d\n"
+        "Average Sentence Length difference: %.2f\n"
+        "Lexical Diversity difference: %.2f%%\n"
+        "Text Complexity difference: %.2f\n"
+        "Verbs difference: %d\n"
+        "Proper Nouns difference: %d\n\n"
+        "Individual Statistics:\n"
+        "File 1: %s\n"
+        "- Total Words: %d\n"
+        "- Unique Words: %d\n"
+        "- Text Complexity: %.2f\n\n"
+        "File 2: %s\n"
+        "- Total Words: %d\n"
+        "- Unique Words: %d\n"
+        "- Text Complexity: %.2f",
+        abs(analyse1->nb_mots_total - analyse2->nb_mots_total),
+        abs(analyse1->nb_mots_uniques - analyse2->nb_mots_uniques),
+        abs(analyse1->nb_phrases - analyse2->nb_phrases),
+        fabs(analyse1->longueur_phrase_moyenne - analyse2->longueur_phrase_moyenne),
+        fabs(analyse1->diversite_lexicale - analyse2->diversite_lexicale) * 100,
+        fabs(analyse1->complexite_texte - analyse2->complexite_texte),
+        abs(analyse1->nb_verbes - analyse2->nb_verbes),
+        abs(analyse1->nb_noms_propres - analyse2->nb_noms_propres),
+        filepath1,
+        analyse1->nb_mots_total,
+        analyse1->nb_mots_uniques,
+        analyse1->complexite_texte,
+        filepath2,
+        analyse2->nb_mots_total,
+        analyse2->nb_mots_uniques,
+        analyse2->complexite_texte
+    );
+
+    // Use the text view for displaying the comparison results
+    set_text_buffer_safely(widgets->result_buffer, result);
+    gtk_widget_set_visible(widgets->result_label, FALSE);
+    gtk_widget_set_visible(widgets->result_scroll_window, TRUE);
+
+    // Clean up
+    libererAnalyse(analyse1);
+    libererAnalyse(analyse2);
+    free(analyse1);
+    free(analyse2);
+}
+
+
 
 static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
@@ -818,7 +886,7 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             result = proper_noun_count(widgets->current_analysis);
         else if (strstr(label, "13. Download analysis")) 
             export_analysis(widgets->current_analysis);
-            result = "Download analysis not implemented yet";
+            //result = "Download analysis not implemented yet";
 
         gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
         gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
@@ -912,16 +980,17 @@ static void on_activate(GtkApplication *app) {
 
     // Compare menu
     widgets->compare_menu_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
-    widgets->entry_file2 = gtk_entry_new();
+    widgets->entry_file_1 = gtk_entry_new();
+    widgets->entry_file_2 = gtk_entry_new();
     GtkWidget *compare_label1 = gtk_label_new("Enter first file path:");
     GtkWidget *compare_label2 = gtk_label_new("Enter second file path:");
     GtkWidget *compare_files_button = gtk_button_new_with_label("Compare");
     GtkWidget *back_button2 = gtk_button_new_with_label("Back to main menu");
     
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), compare_label1);
-    gtk_box_append(GTK_BOX(widgets->compare_menu_box), widgets->entry_file1);
+    gtk_box_append(GTK_BOX(widgets->compare_menu_box), widgets->entry_file_1);
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), compare_label2);
-    gtk_box_append(GTK_BOX(widgets->compare_menu_box), widgets->entry_file2);
+    gtk_box_append(GTK_BOX(widgets->compare_menu_box), widgets->entry_file_2);
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), compare_files_button);
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), back_button2);
 
@@ -965,6 +1034,7 @@ static void on_activate(GtkApplication *app) {
     g_signal_connect(back_button_metrics, "clicked", G_CALLBACK(on_back_to_analyze_clicked), widgets);
     g_signal_connect(analyze_file_button, "clicked", G_CALLBACK(on_analyze_file), widgets);
     g_signal_connect(compare_files_button, "clicked", G_CALLBACK(on_compare_files), widgets);
+
 
     // Show main menu, hide others
     show_main_menu(widgets);
