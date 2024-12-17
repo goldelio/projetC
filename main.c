@@ -6,6 +6,7 @@
 #include <wctype.h>
 #include <locale.h>
 #include <math.h>
+#include <limits.h>
 
 #define LONGUEUR_MOT_MAX 50 // Définit la longueur maximale d'un mot à analyser
 #define NB_MOTS_MAX 20000   // Définit le nombre maximal de mots pouvant être analysés
@@ -28,6 +29,14 @@ typedef struct NoeudHash {
 
 // Structure principale pour analyser le texte
 typedef struct {
+    int nb_espaces;
+    int nb_chars_sans_espaces;      //a
+    int nb_lignes;                  // Nombre total de lignes
+    int nb_caracteres;              // Nombre total de caractères
+    wchar_t phrase_plus_longue[1000];  // Pour stocker la phrase la plus longue
+    wchar_t phrase_plus_courte[1000];  // Pour stocker la phrase la plus courte
+    int longueur_plus_longue;       // Longueur de la plus longue phrase
+    int longueur_plus_courte;       // Longueur de la plus courte phrase
     int nb_mots_total;          // Nombre total de mots analysés dans le texte
     int nb_mots_uniques;        // Nombre de mots uniques trouvés (sans répétition)
     int nb_phrases;             // Nombre total de phrases dans le texte
@@ -60,8 +69,6 @@ typedef struct {
 } MenuWidgets;
 
 
-
-
 // Initialise la structure AnalyseTexte à des valeurs par défaut
 void initialiserAnalyse(AnalyseTexte* analyse) {
     // Remplit toute la structure AnalyseTexte avec des zéros (initialisation complète)
@@ -69,6 +76,28 @@ void initialiserAnalyse(AnalyseTexte* analyse) {
     // Initialise chaque élément de la table de hachage à NULL (aucun mot n'est encore stocké)
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
         analyse->table_hash[i] = NULL;
+    }
+    // Initialisation pour la phrase la plus courte
+    analyse->longueur_plus_courte = INT_MAX;
+    wcscpy(analyse->phrase_plus_courte, L"");
+    wcscpy(analyse->phrase_plus_longue, L"");
+}
+
+// Nouvelle fonction pour gérer l'extraction des phrases
+void gererPhrase(AnalyseTexte* analyse, const wchar_t* phrase, int longueur) {
+    if (longueur > 0) {
+        // Mise à jour de la phrase la plus longue
+        if (longueur > analyse->longueur_plus_longue) {
+            analyse->longueur_plus_longue = longueur;
+            wcsncpy(analyse->phrase_plus_longue, phrase, 999);
+            analyse->phrase_plus_longue[999] = L'\0';
+        }
+        // Mise à jour de la phrase la plus courte
+        if (longueur < analyse->longueur_plus_courte) {
+            analyse->longueur_plus_courte = longueur;
+            wcsncpy(analyse->phrase_plus_courte, phrase, 999);
+            analyse->phrase_plus_courte[999] = L'\0';
+        }
     }
 }
 
@@ -191,7 +220,7 @@ static char* wchar_to_utf8(const wchar_t* str) {
     wcstombs(buffer, str, sizeof(buffer) - 1);
     return buffer;
 }
-
+/*
 void afficherTop10(const AnalyseTexte* analyse) {
     if (analyse->nb_mots_uniques == 0) {
         printf("Aucun mot à afficher.\n");
@@ -251,6 +280,7 @@ void afficherTop10(const AnalyseTexte* analyse) {
     // Libération de la mémoire
     free(mots);
 }
+*/
 /* Vérifie si une chaîne est un palindrome */
 int estPalindrome(const wchar_t* texte) {
     if (!texte || !*texte) return 0;
@@ -332,14 +362,35 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
         exit(EXIT_FAILURE);
     }
 
+
     wchar_t mot_courant[LONGUEUR_MOT_MAX];
+    wchar_t phrase_courante[1000] = {0};
     wint_t c;
     int pos_mot = 0;
+    int pos_phrase = 0;
     int en_mot = 0;
     int mots_dans_phrase = 0;
     int en_paragraphe = 0;
 
+    // Initialisation des compteurs
+    analyse->nb_lignes = 1;
+    analyse->nb_caracteres = 0;
+    analyse->nb_espaces = 0;
+    analyse->nb_chars_sans_espaces = 0;
+    analyse->longueur_plus_longue = 0;
+    analyse->longueur_plus_courte = INT_MAX;
+
     while ((c = fgetwc(fichier)) != WEOF) {
+
+        // Gestion du comptage des caractères
+        if (c == L' ') {
+            analyse->nb_espaces++;
+            analyse->nb_caracteres++;
+        } else if (c != L'\n' && c != L'\r') {
+            analyse->nb_chars_sans_espaces++;
+            analyse->nb_caracteres++;
+        }
+
         if (estCaractereMot(c)) {
             if (!en_mot) {
                 en_mot = 1;
@@ -349,6 +400,10 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
             if (pos_mot < LONGUEUR_MOT_MAX - 1) {
                 mot_courant[pos_mot++] = c;
             }
+            if (pos_phrase < 999) {
+                phrase_courante[pos_phrase++] = c;
+                phrase_courante[pos_phrase] = L'\0';
+            }
         } else {
             if (en_mot) {
                 mot_courant[pos_mot] = L'\0';
@@ -357,18 +412,40 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
                 pos_mot = 0;
                 en_mot = 0;
             }
-
-            if (c == L'.' || c == L'!' || c == L'?') {
-                analyse->nb_phrases++;
-                analyse->longueur_phrase_moyenne += mots_dans_phrase;
-                mots_dans_phrase = 0;
-            } else if (c == L'\n') {
+            if (c == L'\n') {
+                analyse->nb_lignes++;
                 if (!en_paragraphe) {
                     analyse->nb_paragraphes++;
                     en_paragraphe = 1;
                 }
             } else {
                 en_paragraphe = 0;
+            }
+            if (c != L'\n' && c != L'\r') {
+                if (pos_phrase < 999) {
+                    phrase_courante[pos_phrase++] = c;
+                    phrase_courante[pos_phrase] = L'\0';
+                }
+            }
+            if (c == L'.' || c == L'!' || c == L'?') {
+                analyse->nb_phrases++;
+                analyse->longueur_phrase_moyenne += mots_dans_phrase;
+                // Gérer la phrase complète
+                if (pos_phrase > 0) {
+                    if (pos_phrase > analyse->longueur_plus_longue) {
+                        analyse->longueur_plus_longue = pos_phrase;
+                        wcsncpy(analyse->phrase_plus_longue, phrase_courante, 999);
+                        analyse->phrase_plus_longue[999] = L'\0';
+                    }
+                    if (pos_phrase < analyse->longueur_plus_courte && mots_dans_phrase > 0) {
+                        analyse->longueur_plus_courte = pos_phrase;
+                        wcsncpy(analyse->phrase_plus_courte, phrase_courante, 999);
+                        analyse->phrase_plus_courte[999] = L'\0';
+                    }
+                }
+                pos_phrase = 0;
+                phrase_courante[0] = L'\0';
+                mots_dans_phrase = 0;
             }
         }
     }
@@ -395,6 +472,37 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     analyse->complexite_texte = calculerComplexiteTexte(analyse);
 
     fclose(fichier);
+}
+
+static char* get_detailed_statistics(const AnalyseTexte* analyse) {
+    char* result = malloc(1000 * sizeof(char));
+    if (result == NULL) {
+        return NULL;
+    }
+    snprintf(result, 1000, "\nStatistiques détaillées du texte:\n"
+                            "-----------------------------------\n"
+                            "Caractères:\n"
+                            "  - Total avec espaces: %d\n"
+                            "  - Total sans espaces: %d\n"
+                            "  - Nombre d'espaces: %d\n"
+                            "\nStructure:\n"
+                            "  - Nombre de mots: %d\n"
+                            "  - Nombre de phrases: %d\n"
+                            "  - Nombre de paragraphes: %d\n"
+                            "\nPhrases extrêmes:\n"
+                            "Plus longue phrase (%d caractères):\n%ls\n"
+                            "\nPlus courte phrase (%d caractères):\n%ls\n",
+                            analyse->nb_caracteres,
+                            analyse->nb_chars_sans_espaces,
+                            analyse->nb_espaces,
+                            analyse->nb_mots_total,
+                            analyse->nb_phrases,
+                            analyse->nb_paragraphes,
+                            analyse->longueur_plus_longue,
+                            analyse->phrase_plus_longue,
+                            analyse->longueur_plus_courte,
+                            analyse->phrase_plus_courte);
+    return result;
 }
 
 // analysis functions for metrics
@@ -451,17 +559,6 @@ static char* proper_noun_count(const AnalyseTexte* analyse) {
     snprintf(result, sizeof(result), "Proper Nouns: %d", analyse->nb_noms_propres);
     return result;
 }
-/*
-static void top_ten_words(const AnalyseTexte* analyse) { 
-    afficherTop10(analyse);
-}
-static void word_frequency(const AnalyseTexte* analyse) { 
-    afficherFrequenceComplete(analyse);
- }
-static void find_palindromes(const AnalyseTexte* analyse) { 
-    trouverPalindromes(analyse);
-}
-*/
 
 static void export_analysis(const AnalyseTexte* analyse) {
     FILE* fichier = fopen("analyse.txt", "w");
@@ -479,6 +576,8 @@ static void export_analysis(const AnalyseTexte* analyse) {
     fprintf(fichier, "Text Complexity: %.2f\n", analyse->complexite_texte);
     fprintf(fichier, "Verbs: %d\n", analyse->nb_verbes);
     fprintf(fichier, "Proper Nouns: %d\n", analyse->nb_noms_propres);
+
+    fprintf(fichier, get_detailed_statistics(analyse));
 
     fprintf(fichier, "\nComplete Word Frequency:\n");
     fprintf(fichier, "---------------------------------\n");
@@ -599,11 +698,11 @@ static char* get_top_ten_words(const AnalyseTexte* analyse) {
         // Add to final result
         strcat(result, temp);
     }
-    //printf("\ntop 10 mots:\n");
-    //printf(result);
     free(mots);
     return result;
 }
+
+
 
 static char* get_palindromes(const AnalyseTexte* analyse) {
     static char result[8192];
@@ -661,7 +760,8 @@ static char* get_word_frequency(const AnalyseTexte* analyse) {
     return result;
 }
 
-
+//different function to select the menus 
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 static void show_main_menu(MenuWidgets *widgets) {
     gtk_widget_set_visible(widgets->main_menu_box, TRUE);
     gtk_widget_set_visible(widgets->analyze_menu_box, FALSE);
@@ -689,30 +789,40 @@ static void show_compare_menu(MenuWidgets *widgets) {
     gtk_widget_set_visible(widgets->metrics_menu_box, FALSE);
     gtk_widget_set_visible(widgets->compare_menu_box, TRUE);
 }
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+//end of the different function to select the menus
 
+
+//function to quit app
 static void on_quit_clicked(GtkWidget *button, gpointer user_data) {
     GtkWindow *window = GTK_WINDOW(user_data);
     gtk_window_destroy(window);
 }
 
+//function to go to previous menu
 static void on_back_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     show_main_menu(widgets);
+    gtk_widget_set_visible(widgets->result_scroll_window, FALSE); //hide the result text view when back to main menu
+    gtk_widget_set_visible(widgets->result_label, FALSE);
 }
 
+//function to go back to analysis menu
 static void on_back_to_analyze_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     show_analyze_menu(widgets);
+    gtk_widget_set_visible(widgets->result_scroll_window, FALSE); //hide the result text view when back to main menu
+    gtk_widget_set_visible(widgets->result_label, FALSE);
 }
 
 static void on_analyze_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
-    show_analyze_menu(widgets);
+    show_analyze_menu(widgets); //sends to metrics menu
 }
 
 static void on_compare_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
-    show_compare_menu(widgets);
+    show_compare_menu(widgets); //sends to compare menu
 }
 
 static void on_analyze_file(GtkWidget *button, gpointer user_data) {
@@ -738,6 +848,7 @@ static void on_analyze_file(GtkWidget *button, gpointer user_data) {
 }
 
 static void set_text_buffer_safely(GtkTextBuffer *buffer, const char *text) {
+    //function created to make sure the text is utf8 legal before inputing it inside a GTK buffer (otherwise would display nothing and a error message in console)
     if (!text) {
         gtk_text_buffer_set_text(buffer, "", -1);
         return;
@@ -772,7 +883,7 @@ static void on_compare_files(GtkWidget *button, gpointer user_data) {
     const char *filepath1 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file_1));
     const char *filepath2 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file_2));
     
-    // Create two separate analyses
+    // Create two separate analyses for each file
     AnalyseTexte *analyse1 = malloc(sizeof(AnalyseTexte));
     AnalyseTexte *analyse2 = malloc(sizeof(AnalyseTexte));
     
@@ -843,6 +954,7 @@ static void on_compare_files(GtkWidget *button, gpointer user_data) {
 
 
 static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
+    //function called when the user clicks on a button for the single file analysis
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     const char *label = gtk_button_get_label(GTK_BUTTON(button));
     char *result = NULL;
@@ -864,7 +976,7 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
         strstr(label, "7. Text Complexity") ||
         strstr(label, "8. Verbs") ||
         strstr(label, "9. Proper Nouns")||
-        strstr(label, "13. Download analysis")) {
+        strstr(label, "14. Download analysis")) {
         
         if (strstr(label, "1. Total Words")) 
             result = total_words(widgets->current_analysis);
@@ -884,9 +996,11 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             result = verb_count(widgets->current_analysis);
         else if (strstr(label, "9. Proper Nouns")) 
             result = proper_noun_count(widgets->current_analysis);
-        else if (strstr(label, "13. Download analysis")) 
+        else if (strstr(label, "14. Download analysis")){
             export_analysis(widgets->current_analysis);
-            //result = "Download analysis not implemented yet";
+            result = "Analysis saved in file 'analyse.txt'";
+        } 
+            
 
         gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
         gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
@@ -900,9 +1014,10 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             result = get_word_frequency(widgets->current_analysis);
         else if (strstr(label, "12. Palindromes")) 
             result = get_palindromes(widgets->current_analysis);
+        else if(strstr(label, "13. Detailed statistics")) 
+            result = get_detailed_statistics(widgets->current_analysis);
         if (result) {
             set_text_buffer_safely(widgets->result_buffer, result);
-            //gtk_text_buffer_set_text(widgets->result_buffer, result, -1);
             gtk_widget_set_visible(widgets->result_label, FALSE);
             gtk_widget_set_visible(widgets->result_scroll_window, TRUE);
         }
@@ -956,7 +1071,7 @@ static void on_activate(GtkApplication *app) {
     gtk_box_append(GTK_BOX(widgets->analyze_menu_box), analyze_file_button);
     gtk_box_append(GTK_BOX(widgets->analyze_menu_box), back_button1);
 
-    // Metrics menu
+    // Metrics menu with 2-column layout
     widgets->metrics_menu_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     GtkWidget *metrics_label = gtk_label_new("Available Metrics:");
     gtk_box_append(GTK_BOX(widgets->metrics_menu_box), metrics_label);
@@ -966,13 +1081,40 @@ static void on_activate(GtkApplication *app) {
         "4. Paragraphs", "5. Average Sentence Length",
         "6. Lexical Diversity", "7. Text Complexity",
         "8. Verbs", "9. Proper Nouns", "10. Top 10 Words",
-        "11. Word Frequency", "12. Palindromes", "13. Download analysis"
+        "11. Word Frequency", "12. Palindromes", "13. Detailed statistics","14. Download analysis"
     };
 
-    for (int i = 0; i < 13; i++) {
-        GtkWidget *metric_button = gtk_button_new_with_label(metric_labels[i]);
-        g_signal_connect(metric_button, "clicked", G_CALLBACK(on_metric_clicked), widgets);  // Change NULL to widgets
-        gtk_box_append(GTK_BOX(widgets->metrics_menu_box), metric_button);
+    // Create pairs of metric buttons
+    for (int i = 0; i < 14; i += 2) {
+        GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+        // Make the row expand horizontally
+        gtk_widget_set_hexpand(row, TRUE);
+        
+        // First button in pair
+        GtkWidget *metric_button1 = gtk_button_new_with_label(metric_labels[i]);
+        // Make the button expand to fill available space
+        gtk_widget_set_hexpand(metric_button1, TRUE);
+        gtk_widget_set_vexpand(metric_button1, FALSE);
+        gtk_box_append(GTK_BOX(row), metric_button1);
+        g_signal_connect(metric_button1, "clicked", G_CALLBACK(on_metric_clicked), widgets);
+        
+        // Second button in pair (if it exists)
+        if (i + 1 < 14) {
+            GtkWidget *metric_button2 = gtk_button_new_with_label(metric_labels[i + 1]);
+            // Make the button expand to fill available space
+            gtk_widget_set_hexpand(metric_button2, TRUE);
+            gtk_widget_set_vexpand(metric_button2, FALSE);
+            gtk_box_append(GTK_BOX(row), metric_button2);
+            g_signal_connect(metric_button2, "clicked", G_CALLBACK(on_metric_clicked), widgets);
+        } else {
+            // If we have an odd number of buttons, add an invisible placeholder
+            // to maintain layout consistency
+            GtkWidget *placeholder = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+            gtk_widget_set_hexpand(placeholder, TRUE);
+            gtk_box_append(GTK_BOX(row), placeholder);
+        }
+        
+        gtk_box_append(GTK_BOX(widgets->metrics_menu_box), row);
     }
 
     GtkWidget *back_button_metrics = gtk_button_new_with_label("Back to file selection");
@@ -994,7 +1136,6 @@ static void on_activate(GtkApplication *app) {
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), compare_files_button);
     gtk_box_append(GTK_BOX(widgets->compare_menu_box), back_button2);
 
-    
     // Result label
     widgets->result_label = gtk_label_new("");
     gtk_label_set_wrap(GTK_LABEL(widgets->result_label), TRUE);
@@ -1011,7 +1152,7 @@ static void on_activate(GtkApplication *app) {
     // Configure scroll window
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(widgets->result_scroll_window), 
                                 widgets->result_text_view);
-    gtk_widget_set_size_request(widgets->result_scroll_window, -1, 200); // Set minimum height
+    gtk_widget_set_size_request(widgets->result_scroll_window, -1, 200);
 
     // Add all containers to main box
     gtk_box_append(GTK_BOX(main_box), widgets->main_menu_box);
@@ -1035,7 +1176,6 @@ static void on_activate(GtkApplication *app) {
     g_signal_connect(analyze_file_button, "clicked", G_CALLBACK(on_analyze_file), widgets);
     g_signal_connect(compare_files_button, "clicked", G_CALLBACK(on_compare_files), widgets);
 
-
     // Show main menu, hide others
     show_main_menu(widgets);
 
@@ -1043,8 +1183,6 @@ static void on_activate(GtkApplication *app) {
     gtk_window_set_child(GTK_WINDOW(widgets->window), main_box);
     gtk_window_present(GTK_WINDOW(widgets->window));
 
-    // Connect window destroy signal to free the widgets structure
-    //g_signal_connect_swapped(widgets->window, "destroy", G_CALLBACK(g_free), widgets);
     g_signal_connect_swapped(widgets->window, "destroy", G_CALLBACK(cleanup_widgets), widgets);
 }
 
