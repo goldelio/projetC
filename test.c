@@ -5,6 +5,7 @@
 #include <wctype.h>
 #include <locale.h>
 #include <math.h>
+#include <limits.h>
 
 #define LONGUEUR_MOT_MAX 50 // Définit la longueur maximale d'un mot à analyser
 #define NB_MOTS_MAX 20000   // Définit le nombre maximal de mots pouvant être analysés
@@ -27,6 +28,14 @@ typedef struct NoeudHash {
 
 // Structure principale pour analyser le texte
 typedef struct {
+    int nb_espaces;
+    int nb_chars_sans_espaces;
+    int nb_lignes;                  // Nombre total de lignes
+    int nb_caracteres;              // Nombre total de caractères
+    wchar_t phrase_plus_longue[1000];  // Pour stocker la phrase la plus longue
+    wchar_t phrase_plus_courte[1000];  // Pour stocker la phrase la plus courte
+    int longueur_plus_longue;       // Longueur de la plus longue phrase
+    int longueur_plus_courte;       // Longueur de la plus courte phrase
     int nb_mots_total;          // Nombre total de mots analysés dans le texte
     int nb_mots_uniques;        // Nombre de mots uniques trouvés (sans répétition)
     int nb_phrases;             // Nombre total de phrases dans le texte
@@ -47,6 +56,27 @@ void initialiserAnalyse(AnalyseTexte* analyse) {
     // Initialise chaque élément de la table de hachage à NULL (aucun mot n'est encore stocké)
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
         analyse->table_hash[i] = NULL;
+    }
+    // Initialisation pour la phrase la plus courte
+    analyse->longueur_plus_courte = INT_MAX;
+    wcscpy(analyse->phrase_plus_courte, L"");
+    wcscpy(analyse->phrase_plus_longue, L"");
+}
+// Nouvelle fonction pour gérer l'extraction des phrases
+void gererPhrase(AnalyseTexte* analyse, const wchar_t* phrase, int longueur) {
+    if (longueur > 0) {
+        // Mise à jour de la phrase la plus longue
+        if (longueur > analyse->longueur_plus_longue) {
+            analyse->longueur_plus_longue = longueur;
+            wcsncpy(analyse->phrase_plus_longue, phrase, 999);
+            analyse->phrase_plus_longue[999] = L'\0';
+        }
+        // Mise à jour de la phrase la plus courte
+        if (longueur < analyse->longueur_plus_courte) {
+            analyse->longueur_plus_courte = longueur;
+            wcsncpy(analyse->phrase_plus_courte, phrase, 999);
+            analyse->phrase_plus_courte[999] = L'\0';
+        }
     }
 }
 
@@ -308,6 +338,7 @@ void afficherMenuMetriques(void) {
     printf("10. Top 10 des mots\n");
     printf("11. Fréquence complète des mots\n");
     printf("12. Rechercher les palindromes\n");
+    printf("13. Statistiques détaillées (lignes, caractères, phrases extrêmes)\n");
     printf("0. Retour au menu précédent\n");
 }
 
@@ -353,8 +384,28 @@ void afficherMetriqueSpecifique(const AnalyseTexte* analyse, int choix) {
         case 12:
             trouverPalindromes(analyse);
         break;
+        case 13:
+            printf("\nStatistiques détaillées du texte:\n");
+        printf("-----------------------------------\n");
+        printf("Caractères:\n");
+        printf("  - Total avec espaces: %d\n", analyse->nb_caracteres);
+        printf("  - Total sans espaces: %d\n", analyse->nb_chars_sans_espaces);
+        printf("  - Nombre d'espaces: %d\n", analyse->nb_espaces);
+        printf("\nStructure:\n");
+        printf("  - Nombre de mots: %d\n", analyse->nb_mots_total);
+        printf("  - Nombre de phrases: %d\n", analyse->nb_phrases);
+        printf("  - Nombre de paragraphes: %d\n", analyse->nb_paragraphes);
+        printf("\nPhrases extrêmes:\n");
+        printf("Plus longue phrase (%d caractères):\n%ls\n",
+               analyse->longueur_plus_longue,
+               analyse->phrase_plus_longue);
+        printf("\nPlus courte phrase (%d caractères):\n%ls\n",
+               analyse->longueur_plus_courte,
+               analyse->phrase_plus_courte);
+        break;
     }
-}
+    }
+
 
 void menuAnalyseFichierUnique(AnalyseTexte* analyse) {
     int choix;
@@ -365,7 +416,7 @@ void menuAnalyseFichierUnique(AnalyseTexte* analyse) {
         scanf("%d", &choix);
         getchar();
 
-        if (choix >= 1 && choix <= 12) {
+        if (choix >= 1 && choix <= 13) {
             afficherMetriqueSpecifique(analyse, choix);
         } else if (choix != 0) {
             printf("Choix invalide\n");
@@ -379,14 +430,34 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
         exit(EXIT_FAILURE);
     }
 
+    // Initialisation des variables
     wchar_t mot_courant[LONGUEUR_MOT_MAX];
+    wchar_t phrase_courante[1000] = {0};
     wint_t c;
     int pos_mot = 0;
+    int pos_phrase = 0;
     int en_mot = 0;
     int mots_dans_phrase = 0;
     int en_paragraphe = 0;
 
+    // Initialisation des compteurs
+    analyse->nb_lignes = 1;
+    analyse->nb_caracteres = 0;
+    analyse->nb_espaces = 0;
+    analyse->nb_chars_sans_espaces = 0;
+    analyse->longueur_plus_longue = 0;
+    analyse->longueur_plus_courte = INT_MAX;
+
     while ((c = fgetwc(fichier)) != WEOF) {
+        // Gestion du comptage des caractères
+        if (c == L' ') {
+            analyse->nb_espaces++;
+            analyse->nb_caracteres++;
+        } else if (c != L'\n' && c != L'\r') {
+            analyse->nb_chars_sans_espaces++;
+            analyse->nb_caracteres++;
+        }
+
         if (estCaractereMot(c)) {
             if (!en_mot) {
                 en_mot = 1;
@@ -395,6 +466,10 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
             }
             if (pos_mot < LONGUEUR_MOT_MAX - 1) {
                 mot_courant[pos_mot++] = c;
+            }
+            if (pos_phrase < 999) {
+                phrase_courante[pos_phrase++] = c;
+                phrase_courante[pos_phrase] = L'\0';
             }
         } else {
             if (en_mot) {
@@ -405,17 +480,44 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
                 en_mot = 0;
             }
 
-            if (c == L'.' || c == L'!' || c == L'?') {
-                analyse->nb_phrases++;
-                analyse->longueur_phrase_moyenne += mots_dans_phrase;
-                mots_dans_phrase = 0;
-            } else if (c == L'\n') {
+            if (c == L'\n') {
+                analyse->nb_lignes++;
                 if (!en_paragraphe) {
                     analyse->nb_paragraphes++;
                     en_paragraphe = 1;
                 }
             } else {
                 en_paragraphe = 0;
+            }
+
+            if (c != L'\n' && c != L'\r') {
+                if (pos_phrase < 999) {
+                    phrase_courante[pos_phrase++] = c;
+                    phrase_courante[pos_phrase] = L'\0';
+                }
+            }
+
+            if (c == L'.' || c == L'!' || c == L'?') {
+                analyse->nb_phrases++;
+                analyse->longueur_phrase_moyenne += mots_dans_phrase;
+
+                // Gérer la phrase complète
+                if (pos_phrase > 0) {
+                    if (pos_phrase > analyse->longueur_plus_longue) {
+                        analyse->longueur_plus_longue = pos_phrase;
+                        wcsncpy(analyse->phrase_plus_longue, phrase_courante, 999);
+                        analyse->phrase_plus_longue[999] = L'\0';
+                    }
+                    if (pos_phrase < analyse->longueur_plus_courte && mots_dans_phrase > 0) {
+                        analyse->longueur_plus_courte = pos_phrase;
+                        wcsncpy(analyse->phrase_plus_courte, phrase_courante, 999);
+                        analyse->phrase_plus_courte[999] = L'\0';
+                    }
+                }
+
+                pos_phrase = 0;
+                phrase_courante[0] = L'\0';
+                mots_dans_phrase = 0;
             }
         }
     }
@@ -431,6 +533,17 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     if (mots_dans_phrase > 0) {
         analyse->nb_phrases++;
         analyse->longueur_phrase_moyenne += mots_dans_phrase;
+
+        if (pos_phrase > analyse->longueur_plus_longue) {
+            analyse->longueur_plus_longue = pos_phrase;
+            wcsncpy(analyse->phrase_plus_longue, phrase_courante, 999);
+            analyse->phrase_plus_longue[999] = L'\0';
+        }
+        if (pos_phrase < analyse->longueur_plus_courte) {
+            analyse->longueur_plus_courte = pos_phrase;
+            wcsncpy(analyse->phrase_plus_courte, phrase_courante, 999);
+            analyse->phrase_plus_courte[999] = L'\0';
+        }
     }
 
     // Calcul des moyennes et métriques finales
@@ -443,8 +556,6 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
 
     fclose(fichier);
 }
-
-
 void menuComparaisonFichiers(const char* chemin1, const char* chemin2) {
     AnalyseTexte analyse1, analyse2;
     int choix;
