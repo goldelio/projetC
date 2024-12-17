@@ -29,7 +29,7 @@ typedef struct NoeudHash {
 // Structure principale pour analyser le texte
 typedef struct {
     int nb_espaces;
-    int nb_chars_sans_espaces;
+    int nb_chars_sans_espaces;      //a
     int nb_lignes;                  // Nombre total de lignes
     int nb_caracteres;              // Nombre total de caractères
     wchar_t phrase_plus_longue[1000];  // Pour stocker la phrase la plus longue
