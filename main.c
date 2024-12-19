@@ -30,7 +30,7 @@ typedef struct NoeudHash {
 // Structure principale pour analyser le texte
 typedef struct {
     int nb_espaces;
-    int nb_chars_sans_espaces;      //a
+    int nb_chars_sans_espaces;      
     int nb_lignes;                  // Nombre total de lignes
     int nb_caracteres;              // Nombre total de caractères
     wchar_t phrase_plus_longue[1000];  // Pour stocker la phrase la plus longue
@@ -505,7 +505,7 @@ static char* get_detailed_statistics(const AnalyseTexte* analyse) {
  * Chacune retourne une chaîne formatée contenant la métrique spécifique
  *
  * @param analyse Pointeur vers la structure d'analyse
- * @return Chaîne formatée contenant la métrique
+ * @return Chaîne formatée contenant la métrique a afficher dans l'interface
  */
 static char* total_words(const AnalyseTexte* analyse) {
     static char result[100];
@@ -820,7 +820,7 @@ static void show_compare_menu(MenuWidgets *widgets) {
 
 
 
-//function called on button clicks
+//functions called on button clicks
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 static void on_quit_clicked(GtkWidget *button, gpointer user_data) { //function to quit app
     GtkWindow *window = GTK_WINDOW(user_data);
