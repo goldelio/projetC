@@ -254,31 +254,6 @@ int estPalindrome(const wchar_t* texte) {
     return est_palindrome;
 }
 
-/* Trouve et affiche les palindromes */
-void trouverPalindromes(const AnalyseTexte* analyse) {
-    printf("\nRecherche des palindromes dans le texte:\n");
-    int palindromes_trouves = 0;
-
-    for (int i = 0; i < TAILLE_HASHTABLE; i++) {
-        NoeudHash* courant = analyse->table_hash[i];
-        while (courant != NULL) {
-            if (wcslen(courant->mot.mot) > 2 && estPalindrome(courant->mot.mot)) {
-                printf("%ls (fréquence: %d)\n",
-                       courant->mot.mot,
-                       courant->mot.frequence);
-                palindromes_trouves++;
-            }
-            courant = courant->suivant;
-        }
-    }
-
-    if (palindromes_trouves == 0) {
-        printf("Aucun palindrome trouvé dans le texte.\n");
-    } else {
-        printf("\nTotal des palindromes trouvés: %d\n", palindromes_trouves);
-    }
-}
-
 void afficherFrequenceComplete(const AnalyseTexte* analyse) {
     printf("\nFréquence complète des mots:\n");
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
@@ -300,7 +275,6 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
         perror("Erreur à l'ouverture du fichier");
         exit(EXIT_FAILURE);
     }
-
 
     wchar_t mot_courant[LONGUEUR_MOT_MAX];
     wchar_t phrase_courante[1000] = {0};
