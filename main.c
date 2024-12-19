@@ -55,14 +55,14 @@ typedef struct {
     GtkWidget *analyze_menu_box;
     GtkWidget *metrics_menu_box;
     GtkWidget *compare_menu_box;
-    GtkWidget *entry_file1;
-    GtkWidget *entry_file_1;
-    GtkWidget *entry_file_2;
-    GtkWidget *result_label;
+    GtkWidget *entry_file1; //for single file analysis
+    GtkWidget *entry_file_1; //for comparison
+    GtkWidget *entry_file_2; //for comparison
+    GtkWidget *result_label; //element to display results on a single line
     GtkWidget *window;
     AnalyseTexte* current_analysis;
-    AnalyseTexte* file1_analysis;
-    AnalyseTexte* file2_analysis;
+    AnalyseTexte* file1_analysis; //for comparison
+    AnalyseTexte* file2_analysis; //for comparison
     GtkWidget *result_text_view;       // For long results
     GtkWidget *result_scroll_window;   // Scrollable container
     GtkTextBuffer *result_buffer;      // Text buffer for text view
@@ -83,7 +83,7 @@ void initialiserAnalyse(AnalyseTexte* analyse) {
     wcscpy(analyse->phrase_plus_longue, L"");
 }
 
-// Nouvelle fonction pour gérer l'extraction des phrases
+// Fonction pour gérer l'extraction des phrases
 void gererPhrase(AnalyseTexte* analyse, const wchar_t* phrase, int longueur) {
     if (longueur > 0) {
         // Mise à jour de la phrase la plus longue
@@ -220,67 +220,7 @@ static char* wchar_to_utf8(const wchar_t* str) {
     wcstombs(buffer, str, sizeof(buffer) - 1);
     return buffer;
 }
-/*
-void afficherTop10(const AnalyseTexte* analyse) {
-    if (analyse->nb_mots_uniques == 0) {
-        printf("Aucun mot à afficher.\n");
-        return;
-    }
 
-    // Allocation dynamique du tableau de mots
-    Mot* mots = (Mot*)malloc(analyse->nb_mots_uniques * sizeof(Mot));
-    if (mots == NULL) {
-        printf("Erreur d'allocation mémoire\n");
-        return;
-    }
-
-    int nb_mots = 0;
-
-    // Collecte des mots depuis la table de hachage
-    for (int i = 0; i < TAILLE_HASHTABLE && nb_mots < analyse->nb_mots_uniques; i++) {
-        NoeudHash* courant = analyse->table_hash[i];
-        while (courant != NULL && nb_mots < analyse->nb_mots_uniques) {
-            mots[nb_mots] = courant->mot;
-            nb_mots++;
-            courant = courant->suivant;
-        }
-    }
-
-    // Tri des 10 premiers mots par fréquence
-    for (int i = 0; i < 10 && i < nb_mots; i++) {
-        int max_idx = i;
-        for (int j = i + 1; j < nb_mots; j++) {
-            if (mots[j].frequence > mots[max_idx].frequence) {
-                max_idx = j;
-            }
-        }
-        if (max_idx != i) {
-            Mot temp = mots[i];
-            mots[i] = mots[max_idx];
-            mots[max_idx] = temp;
-        }
-    }
-
-    // Affichage des résultats
-    printf("\nTop %d des mots les plus fréquents:\n", (nb_mots < 10) ? nb_mots : 10);
-    printf("-----------------------------------\n");
-    for (int i = 0; i < 10 && i < nb_mots; i++) {
-        printf("%d. %ls : %d occurrence%s",
-            i + 1,
-            mots[i].mot,
-            mots[i].frequence,
-            mots[i].frequence > 1 ? "s" : "");
-
-        if (mots[i].est_verbe) printf(" (verbe)");
-        if (mots[i].est_nom_propre) printf(" (nom propre)");
-        printf("\n");
-    }
-    printf("-----------------------------------\n");
-
-    // Libération de la mémoire
-    free(mots);
-}
-*/
 /* Vérifie si une chaîne est un palindrome */
 int estPalindrome(const wchar_t* texte) {
     if (!texte || !*texte) return 0;
@@ -315,7 +255,6 @@ int estPalindrome(const wchar_t* texte) {
 }
 
 /* Trouve et affiche les palindromes */
-
 void trouverPalindromes(const AnalyseTexte* analyse) {
     printf("\nRecherche des palindromes dans le texte:\n");
     int palindromes_trouves = 0;
