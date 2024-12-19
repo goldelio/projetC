@@ -706,8 +706,10 @@ static void show_compare_menu(MenuWidgets *widgets) {
 //end of the different function to select the menus
 
 
-//function to quit app
-static void on_quit_clicked(GtkWidget *button, gpointer user_data) {
+
+//function called on button clicks
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+static void on_quit_clicked(GtkWidget *button, gpointer user_data) { //function to quit app
     GtkWindow *window = GTK_WINDOW(user_data);
     gtk_window_destroy(window);
 }
@@ -738,9 +740,10 @@ static void on_compare_clicked(GtkWidget *button, gpointer user_data) {
     show_compare_menu(widgets); //sends to compare menu
 }
 
+//function to get the file path entered by user and send it to the analysis function
 static void on_analyze_file(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
-    const char *filepath = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file1));
+    const char *filepath = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file1)); //get the file path entered by user
 
     // Free previous analysis if it exists
     if (widgets->current_analysis != NULL) {
@@ -759,9 +762,11 @@ static void on_analyze_file(GtkWidget *button, gpointer user_data) {
     
     show_metrics_menu(widgets);
 }
+//--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+//function created to make sure the text is utf8 legal before inputing it inside a GTK buffer (otherwise would display nothing and a error message in console)
 static void set_text_buffer_safely(GtkTextBuffer *buffer, const char *text) {
-    //function created to make sure the text is utf8 legal before inputing it inside a GTK buffer (otherwise would display nothing and a error message in console)
+    
     if (!text) {
         gtk_text_buffer_set_text(buffer, "", -1);
         return;
@@ -791,8 +796,10 @@ static void set_text_buffer_safely(GtkTextBuffer *buffer, const char *text) {
     }
 }
 
+//function used when user entered 2 file path to compare, it displays the comparison between the 2 files in the text view (scrollable)
 static void on_compare_files(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
+    //gets separate file paths entered by user
     const char *filepath1 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file_1));
     const char *filepath2 = gtk_editable_get_text(GTK_EDITABLE(widgets->entry_file_2));
     
@@ -865,21 +872,21 @@ static void on_compare_files(GtkWidget *button, gpointer user_data) {
 }
 
 
-
+//function called when the user clicks on any button for the single file analysis
 static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
-    //function called when the user clicks on a button for the single file analysis
     MenuWidgets *widgets = (MenuWidgets *)user_data;
+    //we get the label of the button clicked to use it to call the right metric function
     const char *label = gtk_button_get_label(GTK_BUTTON(button));
     char *result = NULL;
     
-    if (!widgets->current_analysis) {
+    if (!widgets->current_analysis) { //should not happen, but just in case
         gtk_label_set_text(GTK_LABEL(widgets->result_label), "No file analyzed yet!");
         gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
         gtk_widget_set_visible(widgets->result_label, TRUE);
         return;
     }
     
-    // For shorter metrics, use label
+    // For shorter metrics outputs, use single line output label
     if (strstr(label, "1. Total Words") ||
         strstr(label, "2. Unique Words") ||
         strstr(label, "3. Sentences") ||
@@ -913,11 +920,10 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             export_analysis(widgets->current_analysis);
             result = "Analysis saved in file 'analyse.txt'";
         } 
-            
-
+        
         gtk_label_set_text(GTK_LABEL(widgets->result_label), result);
-        gtk_widget_set_visible(widgets->result_scroll_window, FALSE);
-        gtk_widget_set_visible(widgets->result_label, TRUE);
+        gtk_widget_set_visible(widgets->result_scroll_window, FALSE); //hide long text view
+        gtk_widget_set_visible(widgets->result_label, TRUE); //show short text label
     }
     // For longer metrics, use scrollable text view
     else {
@@ -931,8 +937,8 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
             result = get_detailed_statistics(widgets->current_analysis);
         if (result) {
             set_text_buffer_safely(widgets->result_buffer, result);
-            gtk_widget_set_visible(widgets->result_label, FALSE);
-            gtk_widget_set_visible(widgets->result_scroll_window, TRUE);
+            gtk_widget_set_visible(widgets->result_label, FALSE); //hide short text label
+            gtk_widget_set_visible(widgets->result_scroll_window, TRUE); //show long text view
         }
         
     }
@@ -946,6 +952,7 @@ static void cleanup_widgets(MenuWidgets *widgets) {
     g_free(widgets);
 }
 
+//main function to create the GUI
 static void on_activate(GtkApplication *app) {
     setlocale(LC_ALL, "");
 
@@ -954,9 +961,9 @@ static void on_activate(GtkApplication *app) {
     
     widgets->window = gtk_application_window_new(app);
     gtk_window_set_title(GTK_WINDOW(widgets->window), "Text Analysis Tool");
-    gtk_window_set_default_size(GTK_WINDOW(widgets->window), 500, 400);
+    gtk_window_set_default_size(GTK_WINDOW(widgets->window), 500, 400); //set window size
 
-    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
+    GtkWidget *main_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10); //main box to hold all the widgets
     gtk_widget_set_margin_start(main_box, 20);
     gtk_widget_set_margin_end(main_box, 20);
     gtk_widget_set_margin_top(main_box, 20);
