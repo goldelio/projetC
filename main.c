@@ -69,7 +69,12 @@ typedef struct {
 } MenuWidgets;
 
 
-// Initialise la structure AnalyseTexte à des valeurs par défaut
+/**
+ * Initialise une structure AnalyseTexte avec des valeurs par défaut
+ * Met à zéro tous les compteurs et initialise la table de hachage
+ *
+ * @param analyse Pointeur vers la structure à initialiser
+ */
 void initialiserAnalyse(AnalyseTexte* analyse) {
     // Remplit toute la structure AnalyseTexte avec des zéros (initialisation complète)
     memset(analyse, 0, sizeof(AnalyseTexte));
@@ -83,7 +88,14 @@ void initialiserAnalyse(AnalyseTexte* analyse) {
     wcscpy(analyse->phrase_plus_longue, L"");
 }
 
-// Fonction pour gérer l'extraction des phrases
+/**
+ * Gère le traitement d'une phrase complète dans l'analyse
+ * Met à jour les phrases les plus longues et les plus courtes
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @param phrase La phrase à traiter
+ * @param longueur Longueur de la phrase en caractères
+ */
 void gererPhrase(AnalyseTexte* analyse, const wchar_t* phrase, int longueur) {
     if (longueur > 0) {
         // Mise à jour de la phrase la plus longue
@@ -101,7 +113,13 @@ void gererPhrase(AnalyseTexte* analyse, const wchar_t* phrase, int longueur) {
     }
 }
 
-// Libère la mémoire allouée dynamiquement pour la structure AnalyseTexte
+/**
+ * Libère la mémoire allouée pour une analyse de texte
+ * Parcourt la table de hachage et libère tous les noeuds
+ *
+ * @param analyse Pointeur vers la structure à libérer
+ */
+
 void libererAnalyse(AnalyseTexte* analyse) {
     // Parcourt chaque entrée de la table de hachage
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
@@ -117,14 +135,25 @@ void libererAnalyse(AnalyseTexte* analyse) {
     }
 }
 
-// Vérifie si un caractère fait partie d'un mot valide
+/**
+ * Vérifie si un caractère peut faire partie d'un mot
+ * Retourne vrai pour les caractères alphanumériques, tirets, apostrophes et underscores
+ *
+ * @param c Caractère à vérifier
+ * @return 1 si le caractère est valide, 0 sinon
+ */
 int estCaractereMot(wchar_t c) {
     // Retourne vrai si le caractère est alphanumérique (lettre ou chiffre),
     // ou s'il s'agit d'un tiret, d'une apostrophe ou d'un underscore
     return iswalnum(c) || c == L'-' || c == L'\'' || c == L'_';
 }
 
-// Normalise un mot en le convertissant en minuscules et en retirant les caractères non valides
+/**
+ * Normalise un mot en le convertissant en minuscules et en retirant les caractères invalides
+ * Modifie directement la chaîne passée en paramètre
+ *
+ * @param mot Chaîne de caractères à normaliser
+ */
 void normaliserMot(wchar_t* mot) {
     int i, j = 0; // `i` parcourt le mot d'origine, `j` construit le mot normalisé
     for (i = 0; mot[i]; i++) {
@@ -137,7 +166,13 @@ void normaliserMot(wchar_t* mot) {
     mot[j] = L'\0'; // Termine la chaîne de caractères normalisée avec un caractère nul
 }
 
-// Calcule la valeur de hachage d'un mot pour la table de hachage
+/**
+ * Calcule la valeur de hachage d'un mot pour la table de hachage
+ * Utilise l'algorithme DJB2
+ *
+ * @param mot Mot dont on veut calculer la valeur de hachage
+ * @return Valeur de hachage entre 0 et TAILLE_HASHTABLE-1
+ */
 unsigned int calculerHash(const wchar_t* mot) {
     unsigned int hash = 5381; // Initialisation de la valeur de hachage avec une constante
     int c; // Variable pour stocker chaque caractère du mot
@@ -150,7 +185,12 @@ unsigned int calculerHash(const wchar_t* mot) {
     return hash % TAILLE_HASHTABLE;
 }
 
-// Détecte les types grammaticaux d'un mot (nom propre ou verbe)
+/**
+ * Détermine si un mot est un verbe ou un nom propre en fonction de critères simples
+ * Met à jour les champs est_verbe et est_nom_propre de la structure Mot
+ *
+ * @param mot Pointeur vers la structure Mot à analyser
+ */
 void detecterTypeMot(Mot* mot) {
     int len = wcslen(mot->mot); // Calcule la longueur du mot
     // Vérifie si le mot commence par une lettre majuscule, indiquant un nom propre
@@ -167,7 +207,13 @@ void detecterTypeMot(Mot* mot) {
     }
 }
 
-// Calcule la complexité textuelle en fonction de plusieurs métriques
+/**
+ * Calcule la complexité globale du texte basée sur plusieurs métriques
+ * Combine la longueur des phrases, diversité lexicale, proportion de verbes et autres facteurs
+ *
+ * @param analyse Pointeur vers la structure contenant les données d'analyse
+ * @return Score de complexité (plus le score est élevé, plus le texte est complexe)
+ */
 double calculerComplexiteTexte(const AnalyseTexte* analyse) {
     return (
         0.3 * analyse->longueur_phrase_moyenne + // Pondère la longueur moyenne des phrases
@@ -177,7 +223,13 @@ double calculerComplexiteTexte(const AnalyseTexte* analyse) {
         0.15 * analyse->longueur_mot_moyenne // Pondère la longueur moyenne des mots
     );
 }
-// Ajoute un mot à la table de hachage dans l'analyse
+/**
+ * Ajoute ou met à jour un mot dans la table de hachage
+ * Crée une nouvelle entrée si le mot n'existe pas, sinon incrémente sa fréquence
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @param mot Mot à ajouter ou mettre à jour
+ */
 void ajouterMot(AnalyseTexte* analyse, const wchar_t* mot) {
     // Calcule l'index de hachage pour le mot
     unsigned int index = calculerHash(mot);
@@ -214,6 +266,13 @@ void ajouterMot(AnalyseTexte* analyse, const wchar_t* mot) {
     if (nouveau->mot.est_nom_propre) analyse->nb_noms_propres++;
 }
 
+/**
+ * Convertit une chaîne de caractères larges (wchar_t) en UTF-8
+ * Utilise un buffer statique pour stocker la conversion
+ *
+ * @param str Chaîne wchar_t à convertir
+ * @return Pointeur vers la chaîne convertie en UTF-8
+ */
 static char* wchar_to_utf8(const wchar_t* str) {
     static char buffer[8192];  // Static buffer for the converted string
     memset(buffer, 0, sizeof(buffer));
@@ -221,7 +280,13 @@ static char* wchar_to_utf8(const wchar_t* str) {
     return buffer;
 }
 
-/* Vérifie si une chaîne est un palindrome */
+/**
+ * Vérifie si une chaîne de caractères est un palindrome
+ * Ignore la casse et les caractères non alphanumériques
+ *
+ * @param texte Chaîne à vérifier
+ * @return 1 si la chaîne est un palindrome, 0 sinon
+ */
 int estPalindrome(const wchar_t* texte) {
     if (!texte || !*texte) return 0;
 
@@ -253,7 +318,12 @@ int estPalindrome(const wchar_t* texte) {
     free(texte_normalise);
     return est_palindrome;
 }
-
+/**
+ * Affiche la fréquence de tous les mots du texte
+ * Parcourt la table de hachage et affiche chaque mot avec sa fréquence et son type
+ *
+ * @param analyse Pointeur vers la structure contenant l'analyse
+ */
 void afficherFrequenceComplete(const AnalyseTexte* analyse) {
     printf("\nFréquence complète des mots:\n");
     for (int i = 0; i < TAILLE_HASHTABLE; i++) {
@@ -268,7 +338,13 @@ void afficherFrequenceComplete(const AnalyseTexte* analyse) {
     }
 }
 
-
+/**
+ * Analyse un fichier texte et remplit une structure AnalyseTexte avec diverses statistiques
+ * Compte les caractères, mots, phrases, et calcule différentes métriques
+ *
+ * @param chemin Chemin du fichier à analyser
+ * @param analyse Pointeur vers la structure qui contiendra les résultats
+ */
 void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
     FILE* fichier = fopen(chemin, "r");
     if (fichier == NULL) {
@@ -386,7 +462,13 @@ void analyserFichier(const char* chemin, AnalyseTexte* analyse) {
 
     fclose(fichier);
 }
-
+/**
+ * Génère un rapport détaillé des statistiques d'analyse
+ * Inclut des informations sur les caractères, la structure et les phrases extrêmes
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @return Chaîne de caractères contenant le rapport (doit être libérée par l'appelant)
+ */
 static char* get_detailed_statistics(const AnalyseTexte* analyse) {
     char* result = malloc(1000 * sizeof(char));
     if (result == NULL) {
@@ -418,7 +500,13 @@ static char* get_detailed_statistics(const AnalyseTexte* analyse) {
     return result;
 }
 
-// analysis functions for metrics
+/**
+ * Fonctions de récupération des métriques individuelles
+ * Chacune retourne une chaîne formatée contenant la métrique spécifique
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @return Chaîne formatée contenant la métrique
+ */
 static char* total_words(const AnalyseTexte* analyse) {
     static char result[100];
     snprintf(result, sizeof(result), "Total Words: %d", analyse->nb_mots_total);
@@ -472,7 +560,12 @@ static char* proper_noun_count(const AnalyseTexte* analyse) {
     snprintf(result, sizeof(result), "Proper Nouns: %d", analyse->nb_noms_propres);
     return result;
 }
-
+/**
+ * Exporte l'analyse complète dans un fichier texte
+ * Crée un fichier 'analyse.txt' avec toutes les statistiques et fréquences
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ */
 static void export_analysis(const AnalyseTexte* analyse) {
     FILE* fichier = fopen("analyse.txt", "w");
     if (fichier == NULL) {
@@ -540,7 +633,13 @@ static void export_analysis(const AnalyseTexte* analyse) {
 
     fclose(fichier);
 }
-
+/**
+ * Retourne les 10 mots les plus fréquents du texte
+ * Trie les mots par fréquence et formate le résultat
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @return Chaîne formatée contenant les 10 mots les plus fréquents
+ */
 static char* get_top_ten_words(const AnalyseTexte* analyse) {
     static char result[8192];
     char temp[1024];  // Increased buffer size for UTF-8 characters
@@ -615,8 +714,12 @@ static char* get_top_ten_words(const AnalyseTexte* analyse) {
     return result;
 }
 
-
-
+/**
+ * Trouve et retourne tous les palindromes du texte
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @return Chaîne formatée contenant la liste des palindromes trouvés
+ */
 static char* get_palindromes(const AnalyseTexte* analyse) {
     static char result[8192];
     char temp[256];
@@ -648,7 +751,12 @@ static char* get_palindromes(const AnalyseTexte* analyse) {
 
     return result;
 }
-
+/**
+ * Retourne la fréquence de tous les mots du texte
+ *
+ * @param analyse Pointeur vers la structure d'analyse
+ * @return Chaîne formatée contenant la fréquence de tous les mots
+ */
 static char* get_word_frequency(const AnalyseTexte* analyse) {
     static char result[8192];
     char temp[256];
@@ -673,7 +781,12 @@ static char* get_word_frequency(const AnalyseTexte* analyse) {
     return result;
 }
 
-//different function to select the menus 
+/**
+ * Fonctions de gestion de l'interface GTK
+ * Gèrent l'affichage des différents menus et la navigation
+ *
+ * @param widgets Pointeur vers la structure contenant les widgets
+ */
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 static void show_main_menu(MenuWidgets *widgets) {
     gtk_widget_set_visible(widgets->main_menu_box, TRUE);
@@ -714,7 +827,12 @@ static void on_quit_clicked(GtkWidget *button, gpointer user_data) { //function 
     gtk_window_destroy(window);
 }
 
-//function to go to previous menu
+/**
+ * Gestionnaires d'événements pour la navigation
+ *
+ * @param button Le bouton qui a déclenché l'événement
+ * @param user_data Pointeur vers la structure des widgets
+ */
 static void on_back_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     show_main_menu(widgets);
@@ -871,8 +989,13 @@ static void on_compare_files(GtkWidget *button, gpointer user_data) {
     free(analyse2);
 }
 
+/**
+ * Gestionnaire d'événement pour les boutons de métriques
+ *
+ * @param button Le bouton qui a déclenché l'événement
+ * @param user_data Pointeur vers la structure des widgets
+ */
 
-//function called when the user clicks on any button for the single file analysis
 static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
     MenuWidgets *widgets = (MenuWidgets *)user_data;
     //we get the label of the button clicked to use it to call the right metric function
@@ -944,6 +1067,11 @@ static void on_metric_clicked(GtkWidget *button, gpointer user_data) {
     }
 }
 
+/**
+ * Nettoie et libère la mémoire des widgets
+ *
+ * @param widgets Pointeur vers la structure des widgets à libérer
+ */
 static void cleanup_widgets(MenuWidgets *widgets) {
     if (widgets->current_analysis != NULL) {
         libererAnalyse(widgets->current_analysis);
@@ -951,8 +1079,12 @@ static void cleanup_widgets(MenuWidgets *widgets) {
     }
     g_free(widgets);
 }
-
-//main function to create the GUI
+/**
+ * Gestionnaire d'activation de l'application GTK
+ * Crée et initialise l'interface utilisateur
+ *
+ * @param app L'application GTK
+ */
 static void on_activate(GtkApplication *app) {
     setlocale(LC_ALL, "");
 
@@ -1106,7 +1238,14 @@ static void on_activate(GtkApplication *app) {
     g_signal_connect_swapped(widgets->window, "destroy", G_CALLBACK(cleanup_widgets), widgets);
 }
 
-
+/**
+ * Point d'entrée principal du programme
+ * Initialise et lance l'application GTK
+ *
+ * @param argc Nombre d'arguments
+ * @param argv Tableau des arguments
+ * @return Code de retour de l'application
+ */
 
 int main(int argc, char **argv) {
     GtkApplication *app;
