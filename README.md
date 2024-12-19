@@ -1,4 +1,5 @@
 **# Outil d'Analyse de Texte**
+
 Une application basée sur GTK offrant des capacités complètes d'analyse de texte pour les fichiers texte, incluant l'analyse statistique et la comparaison entre fichiers.
 
 **## Fonctionnalités**
